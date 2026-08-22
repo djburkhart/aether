@@ -1,0 +1,8 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aether.Editor.Views.ContributionView">
+  <StackPanel Margin="8" Spacing="8">
+    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+  </StackPanel>
+</UserControl>

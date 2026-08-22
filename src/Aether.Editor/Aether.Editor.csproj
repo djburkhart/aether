@@ -32,12 +32,28 @@
     <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
     <ProjectReference Include="..\Aether.Atf.Commands\Aether.Atf.Commands.csproj" />
     <ProjectReference Include="..\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\Aether.Plugins\Aether.Plugins.csproj" />
     <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
+    <ProjectReference Include="..\..\samples\plugins\Aether.SamplePlugin\Aether.SamplePlugin.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\UsingDom\ogre-adventure-ii.xml" Link="ogre-adventure-ii.xml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="PublishSamplePlugin" AfterTargets="Build">
+    <PropertyGroup>
+      <_SamplePluginDir>$(MSBuildThisFileDirectory)..\..\samples\plugins\Aether.SamplePlugin\bin\$(Configuration)\net10.0\</_SamplePluginDir>
+      <_PluginDest>$(OutputPath)plugins\Aether.SamplePlugin\</_PluginDest>
+    </PropertyGroup>
+    <MakeDir Directories="$(_PluginDest)" />
+    <ItemGroup>
+      <_SamplePluginFiles Include="$(_SamplePluginDir)Aether.SamplePlugin.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SamplePluginFiles)" DestinationFolder="$(_PluginDest)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

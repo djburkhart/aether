@@ -225,27 +225,40 @@ namespace Aether.Editor
             await dialog.ShowDialog(this);
         }
 
+        private static string AboutText(EditorSession? session)
+        {
+            var text =
+                "Aether is a tools-first open-source engine. This window is the Phase 1 Avalonia shell.\n\n" +
+                "The document and property system come from SonyWWS ATF (Apache 2.0), " +
+                "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
+                "Sony and PlayStation names are used only to describe that origin.\n\n" +
+                "Open/Save uses Core DomXmlReader / DomXmlWriter. " +
+                "Host plugins use Microsoft.Extensions.DependencyInjection + AssemblyLoadContext; " +
+                "ATF types still use MEF internally.\n" +
+                "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid.";
+
+            if (session == null || session.LoadedPlugins.Count == 0)
+                return text + "\n\nNo host plugins loaded.";
+
+            text += "\n\nPlugins:";
+            foreach (var plugin in session.LoadedPlugins)
+                text += "\n- " + plugin.Display;
+            return text;
+        }
+
         private async void OnAbout(object? sender, RoutedEventArgs e)
         {
             var dialog = new Window
             {
                 Title = "About Aether",
                 Width = 480,
-                Height = 260,
+                Height = 320,
                 CanResize = false,
                 Content = new TextBlock
                 {
                     TextWrapping = Avalonia.Media.TextWrapping.Wrap,
                     Margin = new Avalonia.Thickness(16),
-                    Text =
-                        "Aether is a tools-first open-source engine. This window is the Phase 1 Avalonia shell.\n\n" +
-                        "The document and property system come from SonyWWS ATF (Apache 2.0), " +
-                        "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
-                        "Sony and PlayStation names are used only to describe that origin.\n\n" +
-                        "Open/Save uses Core DomXmlReader / DomXmlWriter. " +
-                        "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +
-                        "Menus are Avalonia controls; ICommandService.RunContextMenu and " +
-                        "StandardFileCommands are not hosted yet."
+                    Text = AboutText(DataContext as EditorSession)
                 }
             };
             await dialog.ShowDialog(this);

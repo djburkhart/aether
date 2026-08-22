@@ -28,9 +28,11 @@ are derivatives of SonyWWS ATF `DevTools/DomGen`. `samples/UsingDom` and
 `samples/UsingDom.Document` retarget ATF `Samples/UsingDom` (schema +
 document graph) plus property-editing descriptors from
 `Aether.Atf.PropertyEditing`. `testdata/atf/UsingDom/ogre-adventure-ii.xml`
-is the DomXmlWriter form of that sample document. `src/Aether.Editor` is new Aether hosting
-code; it is not a Sony product. Sony and PlayStation names appear only
-in About / NOTICE to describe ATF origin.
+is the DomXmlWriter form of that sample document. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
+code; they are not Sony products. Sony and PlayStation names appear only
+in About / NOTICE to describe ATF origin. Host plugins use
+Microsoft.Extensions.DependencyInjection. ATF Core / Commands /
+PropertyEditing still use System.ComponentModel.Composition.
 See PORTING.md for the portable subset and cuts.
 
 Third-party UI (MIT), referenced from `src/Aether.Editor`:
