@@ -179,6 +179,100 @@ UI hosts and adjacent GUI:
 5. **`StandardViewCommands` / scripting** still behind the IronPython dependency.
 6. **No unit tests.**
 
+---
+
+# ATF property-editing logic → net10.0
+
+Third Phase 0 build signal. Logic-only property-editing types from `Framework/Atf.Gui` retargeted as `src/Aether.Atf.PropertyEditing`. Depends on `Aether.Atf.Core` and `Aether.Atf.Commands`. No GUI assemblies.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream area | `Framework/Atf.Gui/Controls/PropertyEditing`, `Framework/Atf.Gui/Dom` property-descriptor adapters, `IAnnotatedParams` |
+| Destination | `src/Aether.Atf.PropertyEditing` (`Aether.Atf.PropertyEditing.csproj`) |
+| Destination TFM | `net10.0` |
+| Assembly name | `Aether.Atf.PropertyEditing` |
+| Namespaces | `Sce.Atf`, `Sce.Atf.Applications`, `Sce.Atf.Controls.PropertyEditing`, `Sce.Atf.Dom` (kept) |
+
+Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`).
+
+## Layout decision
+
+A **new project** is cleaner than folding this into Core or Commands.
+
+- **Not Core.** Core already owns the DOM-side TypeDescriptor pieces (`CustomTypeDescriptorNodeAdapter`, `IPropertyValueValidator`, `BindingAdapterObject`, `ObservableDomNodeAdapter`). The Atf.Gui descriptors sit *above* that and need `IPropertyEditingContext`, `ISelectionContext`, and `Sce.Atf.Input.Keys`. Pulling those into Core would invert the Commands dependency.
+- **Not Commands.** Commands only needed `BoundPropertyDescriptor` for settings persistence. Moving that type here would cycle: `CommandServiceBase` needs it, and `SelectionPropertyEditingContext` needs Commands types.
+- **Commands reference is required.** `IPropertyEditingContext` and `ISelectionContext` live in Commands. `PropertyUtils.IsEditKey` uses ATF’s own `Keys`. Nothing else from Commands is needed at compile time.
+
+`BoundPropertyDescriptor` and `IPropertyEditingContext` stay in Commands. They are **not** duplicated here.
+
+## Cut line (verified)
+
+The hypothesis held. ATF’s property framework is TypeDescriptor / custom descriptor / editing-context / converter logic. WinForms `PropertyGrid` / `PropertyView` / `IPropertyEditor` and WPF value editors are the UI skin.
+
+`IPropertyEditor` lives in `Atf.Gui.WinForms` (`GetEditingControl` returns a WinForms `Control`) and was not copied. `PropertyEditorControlContext` and `TypeDescriptorContext` are also WinForms. Schema annotations still store an `object editor` on `Sce.Atf.Dom.PropertyDescriptor`; a later Avalonia host can supply its own editor objects.
+
+`Color` comes from inbox `System.Drawing.Primitives` (`IntColorConverter` uses `Color.FromArgb` / `ToArgb`). `System.Drawing.Common` is not referenced.
+
+## What compiled
+
+34 C# files. No source adaptations were required.
+
+- **DOM descriptors (above Core):** `Sce.Atf.Dom.PropertyDescriptor`, `AttributePropertyDescriptor`, `ChildPropertyDescriptor`, `ChildAttributePropertyDescriptor`, `ChildAttributeCollectionPropertyDescriptor`, `MultiPropertyDescriptor`, `ObservableCustomTypeDescriptorNodeAdapter`, `DomNodeTypeExtensions.RegisterDescriptor`
+- **Editing contexts:** `PropertyEditingContext`, `SelectionPropertyEditingContext` (adapts any `ISelectionContext`, raises `Reloaded` via `IValidationContext`)
+- **Descriptor adapters:** `UnboundPropertyDescriptor`, `PropertyCollectionWrapper`, `IDynamicTypeDescriptor`, `IPropertyCustomSorter`
+- **Converters:** `BoundedFloatConverter`, `BoundedIntConverter`, `EnumTypeConverter`, `ExclusiveEnumTypeConverter`, `FlagsTypeConverter`, `FloatArrayConverter`, `IntColorConverter`, `IntEnumTypeConverter`, `ReadOnlyConverter`, `UniformFloatArrayConverter`
+- **Utils / events:** `PropertyUtils`, `PropertyEditedEventArgs`, `PropertyErrorEventArgs`, `IAnnotatedParams` (schema-annotation hook used by converters and `PropertyDescriptor.ParseXml`)
+- **Grid metadata (no controls):** `PropertyGridMode`, `PropertySorting`, `CustomizeAttribute`
+- **Control contracts (no implementations):** `IPropertyEditingControlOwner`, `ICacheablePropertyControl`
+- **Lists:** `SortableBindingList<T>` (inbox `BindingList` / `IBindingListView`)
+
+`PropertyDescriptor.ParseXml` still constructs editor/converter instances from schema annotation type names via `Activator.CreateInstance` + `IAnnotatedParams.Initialize`. WinForms editor type names in existing schemas will fail at runtime until a portable editor is registered; that is expected.
+
+## What was adapted
+
+None. Copied sources compiled against `net10.0` as-is. Sony copyright headers are unchanged. The new `.csproj` is the only new file that is not a copy.
+
+## What was excluded
+
+### From `Atf.Gui/Controls/PropertyEditing` (UI or already ported)
+
+| File | Reason |
+|---|---|
+| `ColorEditor.cs` | Extends `System.Drawing.Design.ColorEditor` (GDI+ `UITypeEditor`) |
+| `DateTimeEditor.cs` | Extends `System.ComponentModel.Design.DateTimeEditor` |
+| `EmbeddedPropertyView.cs` | Commented-out WinForms leftover |
+| `PropertyChangedExtensions.cs` | `internal`; only used by circuit-graph UI |
+| `BoundPropertyDescriptor.cs` | Already in `Aether.Atf.Commands` |
+
+### From `Atf.Gui/Dom` (not this slice)
+
+| File | Reason |
+|---|---|
+| `CustomTypeDescriptorNodeAdapter.cs` | Older leftover. The live type is already in `Aether.Atf.Core`. |
+| `BindingAdapter.cs` | WPF `Path=As.DomDocument.*` helper around Core’s `BindingAdapterObject` |
+
+### Adjacent Atf.Gui (not property logic)
+
+- `GroupAttribute` — `DataBoundListView` column grouping
+- `EnumDisplayUtil` — Core already has `EnumUtil` + `DisplayStringAttribute`
+
+### WinForms / WPF property-grid skin (not copied)
+
+`Atf.Gui.WinForms/Controls/PropertyEditing/` (`IPropertyEditor`, `PropertyGrid`, `PropertyGridView`, `PropertyView`, `PropertyEditorControlContext`, `BoundedIntEditor` / `BoundedFloatEditor`, `EnumUITypeEditor`, `FlagsUITypeEditor`, `ColorPickerEditor`, `NumericEditor`, `GridControl`, collection/array editors, …) and `Atf.Gui.Wpf/Controls/PropertyEditing/` value editors.
+
+### LevelEditor
+
+`LevelEditorCore` PropertyEditing is **not** in this PR. ATF first.
+
+## Remaining blockers / debt (property editing)
+
+1. **No property-grid host.** `IPropertyEditor` / WinForms `PropertyGrid` were left behind. An Avalonia (or headless) host must bind to `IPropertyEditingContext` + descriptors.
+2. **Schema `editor=` type names** still point at WinForms `UITypeEditor` types. Converters (`IAnnotatedParams`) work; visual editors do not exist in this assembly.
+3. **`IPropertyValueValidator`** is already in Core and was not wired into these descriptors (same as upstream Atf.Gui).
+4. **No unit tests.**
+
 ## License / attribution
 
 - Apache License 2.0 (`LICENSE`).
@@ -192,4 +286,4 @@ UI hosts and adjacent GUI:
 dotnet build Aether.sln -c Release
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln` (both `Aether.Atf.Core` and `Aether.Atf.Commands`). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln` (`Aether.Atf.Core`, `Aether.Atf.Commands`, `Aether.Atf.PropertyEditing`). Windows CI is not required; no Windows-only API remains in the compiled set.
