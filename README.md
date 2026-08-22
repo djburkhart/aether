@@ -10,7 +10,7 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 0. First build signal: retarget ATF `Atf.Core` (DOM, schema, commands, adapters) to `net10.0`. No GUI. No DX11.
+Phase 0. First build signal is in: ATF `Atf.Core` (DOM, schema, adapters, transactions, selection) retargeted to `net10.0` as `src/Aether.Atf.Core`. No GUI. No DX11. See [PORTING.md](PORTING.md).
 
 Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred editor UI is Avalonia. Stride's official Avalonia Game Studio is not ready enough to be our tools host; we build the authoring layer.
 
@@ -18,6 +18,15 @@ Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred edi
 
 Apache 2.0. Heavy attribution to Sony Computer Entertainment America LLC. See [NOTICE](NOTICE) and [LICENSE](LICENSE).
 
+## Build
+
+Requires the .NET 10 SDK.
+
+```bash
+dotnet build Aether.sln -c Release
+```
+
 ## Docs
 
 - [Phase 0 snapshot](docs/phase-0-snapshot.md)
+- [Atf.Core port notes](PORTING.md)
