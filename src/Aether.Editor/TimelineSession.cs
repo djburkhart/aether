@@ -271,7 +271,7 @@ namespace Aether.Editor
                     Rows.Add(new TimelineRowItem(track.Name ?? "Track", false, row));
                     foreach (IInterval interval in track.Intervals)
                     {
-                        Interval typed = interval as Interval;
+                        Interval? typed = interval as Interval;
                         if (typed == null)
                             continue;
                         Intervals.Add(new TimelineIntervalItem(typed, row));
