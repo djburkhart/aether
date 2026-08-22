@@ -273,6 +273,71 @@ None. Copied sources compiled against `net10.0` as-is. Sony copyright headers ar
 3. **`IPropertyValueValidator`** is already in Core and was not wired into these descriptors (same as upstream Atf.Gui).
 4. **No unit tests.**
 
+---
+
+# ATF DomGen → net10.0 schema codegen
+
+Fourth Phase 0 build signal. SonyWWS `DevTools/DomGen` retargeted as a library plus a `dotnet` CLI. Reuses `Aether.Atf.Core` `XmlSchemaTypeLoader`. No Visual Studio custom-tool host.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream area | `DevTools/DomGen` (`SchemaLoader`, `SchemaGen`, `Program`) |
+| Related, not ported | `DevTools/CustomToolDomGen` (VS COM custom tool), `DevTools/MsBuildUtils` (VS project parser, not schema codegen) |
+| Destination library | `src/Aether.Atf.DomGen` (`Aether.Atf.DomGen.csproj`) |
+| Destination CLI | `src/Aether.Atf.DomGen.Cli` (`aether-domgen`) |
+| Destination TFM | `net10.0` |
+| Namespaces | `DomGen` (library, kept), `Aether.Atf.DomGen.Cli` (host) |
+
+Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`) and running `aether-domgen --check` against ATF’s UsingDom `game.xsd` / `GameSchema.cs`.
+
+## Layout decision
+
+**Library + CLI.** The emit API is useful without a process (tests, later MSBuild). The original `DomGen.exe` host is a four-argument argv parser plus an optional MD5 cache; that belongs in a tool, not in Core.
+
+- **Not folded into Core.** `XmlSchemaTypeLoader` already lives there. DomGen is a *consumer* that walks loaded types and writes C#.
+- **Not a VS custom tool.** `CustomToolDomGen` is `BaseCodeGeneratorWithSite` + HKLM COM registration for VS 2002–2010. Left behind. `aether-domgen` produces the same C#.
+- **Not MsBuildUtils.** That project parses `.csproj` / `.sln` XML. It is not schema codegen.
+
+## Cut line (verified)
+
+The hypothesis held. DomGen is XML schema walk + C# text emit. `SchemaLoader` subclasses Core’s `XmlSchemaTypeLoader` and captures `<sce.domgen>` annotations. `SchemaGen.Generate` writes the static schema class (and optional adapters/enums). The only IDE-specific piece was `CustomToolDomGen`.
+
+## What compiled
+
+- **Library:** `SchemaLoader`, `SchemaGen`, `SchemaGenOptions`
+- **CLI:** `aether-domgen` (`PackAsTool`, command name `aether-domgen`)
+- **Smoke compile:** `tests/Aether.Atf.DomGen.Generated` compiles the committed UsingDom `GameSchema.cs` against Core
+
+`aether-domgen testdata/atf/UsingDom/game.xsd testdata/atf/UsingDom/GameSchema.cs Game.UsingDom UsingDom --check` matches the ATF-generated fixture (CRLF-normalized). That is the same invocation as `Samples/UsingDom/Schemas/GenSchemaDef.bat`.
+
+## What was adapted
+
+| File | Change |
+|---|---|
+| `SchemaGen.cs` | `SchemaGenOptions` overload so hosts are not forced to fake argv. `-enums` uses public `StringEnumRule.Values` instead of reflecting private `m_values`. Generated text always uses `\n`. Enum members keep a trailing comma (legal C#; avoids the original `Length-1` newline strip). |
+| `SchemaLoader.cs` | Added the missing Sony copyright header. |
+| `Program.cs` (CLI) | New non-interactive host: flags, `--help` with examples, `--stdout`, `--dry-run`, `--check`, original positional argv, original `-a` / `-annotatedOnly` / `-enums` / `-cache`. Exit 1 on usage errors (upstream printed usage and returned 0). `[STAThread]` dropped. |
+
+## What was excluded
+
+| Item | Reason |
+|---|---|
+| `CustomToolDomGen` | Visual Studio COM custom tool (`Microsoft.CustomTool`, registry) |
+| `MsBuildUtils` | VS project/solution parser, not DomGen |
+| `Localization` DevTool | Resource localization, not schema codegen |
+| LevelEditor `CodeGenDom` | LevelEditor is out of this PR. ATF UsingDom `game.xsd` is the smoke schema. |
+| `DomGen/schemas/colladaschema_131.xsd`, `atgi.xsd` | Large importer schemas; not needed to prove emit |
+| ATF `Test/UnitTests/DomGen/TestSchemaGen.cs` | NUnit + multi-file include/import fixtures. `--check` on UsingDom is the Phase 0 smoke. |
+
+## Remaining blockers / debt (DomGen)
+
+1. **No MSBuild task yet.** Call `aether-domgen` from a target or use the library from a later task.
+2. **`--cache` MD5** is the original hash; fine for up-to-date checks, not a security construct.
+3. **Unit tests** for `-annotatedOnly` / imports (`test_customized.xsd`) were not ported.
+4. **`dotnet tool install`** is not published to NuGet in this PR; run the project (`dotnet run --project src/Aether.Atf.DomGen.Cli`).
+
 ## License / attribution
 
 - Apache License 2.0 (`LICENSE`).
@@ -286,4 +351,10 @@ None. Copied sources compiled against `net10.0` as-is. Sony copyright headers ar
 dotnet build Aether.sln -c Release
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln` (`Aether.Atf.Core`, `Aether.Atf.Commands`, `Aether.Atf.PropertyEditing`). Windows CI is not required; no Windows-only API remains in the compiled set.
+```bash
+dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
+  testdata/atf/UsingDom/game.xsd testdata/atf/UsingDom/GameSchema.cs \
+  Game.UsingDom UsingDom --check
+```
+
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, then runs the DomGen `--check` smoke. Windows CI is not required; no Windows-only API remains in the compiled set.
