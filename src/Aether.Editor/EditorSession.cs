@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 
 using Sce.Atf.Adaptation;
@@ -14,8 +15,8 @@ namespace Aether.Editor
 {
     /// <summary>
     /// Session for the Phase 1 shell: UsingDom document, ATF selection/property
-    /// contexts, and HistoryContext undo. Menus call this directly; ICommandService
-    /// is not the host (RunContextMenu stays unimplemented).</summary>
+    /// contexts, HistoryContext undo, and DomXml Open/Save. Menus call this
+    /// directly; StandardFileCommands / IDocumentService are not the host.</summary>
     public sealed class EditorSession : INotifyPropertyChanged
     {
         public EditorSession()
@@ -26,35 +27,61 @@ namespace Aether.Editor
 
             SchemaPath = schemaPath;
             Loader = new GameSchemaLoader(schemaPath);
-            Game = GameDocument.CreateOgreAdventureII();
-            History = Game.Cast<HistoryContext>();
-            Selection = Game.Cast<SelectionContext>();
-            PropertyEditing = new SelectionPropertyEditingContext { SelectionContext = Selection };
-
             Objects = new ObservableCollection<GameObjectItem>();
             HistoryItems = new ObservableCollection<string>();
-            ReloadObjects();
-            RefreshHistory();
-
-            History.History.CommandDone += (_, _) => RefreshHistory();
-            History.History.CommandUndone += (_, _) => RefreshHistory();
+            PropertyEditing = new SelectionPropertyEditingContext();
+            New();
         }
 
         public string SchemaPath { get; }
 
         public GameSchemaLoader Loader { get; }
 
-        public DomNode Game { get; }
+        public DomNode Game { get; private set; } = null!;
 
-        public HistoryContext History { get; }
+        public HistoryContext History { get; private set; } = null!;
 
-        public SelectionContext Selection { get; }
+        public SelectionContext Selection { get; private set; } = null!;
 
         public SelectionPropertyEditingContext PropertyEditing { get; }
 
         public ObservableCollection<GameObjectItem> Objects { get; }
 
         public ObservableCollection<string> HistoryItems { get; }
+
+        public string? FilePath
+        {
+            get { return m_filePath; }
+            private set
+            {
+                if (m_filePath == value)
+                    return;
+                m_filePath = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CanSave));
+                OnPropertyChanged(nameof(WindowTitle));
+                OnPropertyChanged(nameof(StatusText));
+            }
+        }
+
+        public bool CanSave
+        {
+            get { return m_filePath != null; }
+        }
+
+        public bool IsDirty
+        {
+            get { return History.Dirty; }
+        }
+
+        public string WindowTitle
+        {
+            get
+            {
+                string name = m_filePath != null ? Path.GetFileName(m_filePath) : "Aether";
+                return IsDirty ? name + " *" : name;
+            }
+        }
 
         public GameObjectItem? SelectedObject
         {
@@ -87,9 +114,11 @@ namespace Aether.Editor
         {
             get
             {
-                if (m_selectedObject == null)
-                    return "Ogre Adventure II — select an object";
-                return m_selectedObject.Name + " (" + m_selectedObject.TypeName + ")";
+                string doc = m_filePath != null ? Path.GetFileName(m_filePath) : "untitled";
+                string sel = m_selectedObject == null
+                    ? "select an object"
+                    : m_selectedObject.Name + " (" + m_selectedObject.TypeName + ")";
+                return doc + (IsDirty ? "*" : string.Empty) + " — " + sel;
             }
         }
 
@@ -123,6 +152,38 @@ namespace Aether.Editor
             }
         }
 
+        public void New()
+        {
+            BindDocument(GameDocument.CreateOgreAdventureII(), null);
+        }
+
+        public void Open(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                throw new ArgumentException("Path is required.", nameof(path));
+            BindDocument(GameDocument.ReadXml(path, Loader), Path.GetFullPath(path));
+        }
+
+        public void Save()
+        {
+            if (m_filePath == null)
+                throw new InvalidOperationException("No file path; use Save As.");
+            SaveAs(m_filePath);
+        }
+
+        public void SaveAs(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                throw new ArgumentException("Path is required.", nameof(path));
+            if (Loader.TypeCollection == null)
+                throw new InvalidOperationException("Schema type collection is not loaded.");
+
+            GameDocument.WriteXml(Game, path, Loader.TypeCollection);
+            FilePath = Path.GetFullPath(path);
+            History.Dirty = false;
+            NotifyFileState();
+        }
+
         public void Undo()
         {
             if (History.CanUndo)
@@ -140,6 +201,60 @@ namespace Aether.Editor
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void BindDocument(DomNode game, string? filePath)
+        {
+            UnhookHistory();
+
+            Game = game;
+            History = game.Cast<HistoryContext>();
+            Selection = game.Cast<SelectionContext>();
+            PropertyEditing.SelectionContext = Selection;
+            m_filePath = filePath;
+            History.Dirty = false;
+            HookHistory();
+
+            m_selectedObject = null;
+            PropertyTarget = null;
+            ReloadObjects();
+            RefreshHistory();
+            OnPropertyChanged(nameof(Game));
+            OnPropertyChanged(nameof(History));
+            OnPropertyChanged(nameof(Selection));
+            OnPropertyChanged(nameof(FilePath));
+            OnPropertyChanged(nameof(CanSave));
+            OnPropertyChanged(nameof(SelectedObject));
+            OnPropertyChanged(nameof(PropertyTarget));
+            NotifyFileState();
+        }
+
+        private void HookHistory()
+        {
+            History.History.CommandDone += OnHistoryChanged;
+            History.History.CommandUndone += OnHistoryChanged;
+            History.DirtyChanged += OnDirtyChanged;
+            m_historyHooked = true;
+        }
+
+        private void UnhookHistory()
+        {
+            if (!m_historyHooked)
+                return;
+            History.History.CommandDone -= OnHistoryChanged;
+            History.History.CommandUndone -= OnHistoryChanged;
+            History.DirtyChanged -= OnDirtyChanged;
+            m_historyHooked = false;
+        }
+
+        private void OnHistoryChanged(object? sender, EventArgs e)
+        {
+            RefreshHistory();
+        }
+
+        private void OnDirtyChanged(object? sender, EventArgs e)
+        {
+            NotifyFileState();
+        }
 
         private void ReloadObjects()
         {
@@ -183,6 +298,8 @@ namespace Aether.Editor
                 OnPropertyChanged(nameof(SelectedObject));
                 RefreshPropertyTarget();
             }
+
+            NotifyFileState();
         }
 
         private void RefreshPropertyTarget()
@@ -202,12 +319,21 @@ namespace Aether.Editor
             OnPropertyChanged(nameof(RedoText));
         }
 
+        private void NotifyFileState()
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(WindowTitle));
+            OnPropertyChanged(nameof(StatusText));
+        }
+
         private void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
         private GameObjectItem? m_selectedObject;
+        private string? m_filePath;
+        private bool m_historyHooked;
     }
 
     public sealed class GameObjectItem

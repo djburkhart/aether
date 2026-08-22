@@ -139,8 +139,7 @@ namespace UsingDom
         {
             using (var stream = new MemoryStream())
             {
-                var writer = new DomXmlWriter(typeCollection);
-                writer.Write(game, stream, new Uri("game.xml", UriKind.Relative));
+                GameDocument.WriteXml(game, stream, new Uri("game.xml", UriKind.Relative), typeCollection);
                 return Encoding.UTF8.GetString(stream.ToArray());
             }
         }
