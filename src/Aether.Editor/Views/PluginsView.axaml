@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aether.Editor.Views.PluginsView">
+  <DockPanel Margin="8">
+    <TextBlock DockPanel.Dock="Top"
+               Text="Loaded plugins (ALC + DI)"
+               FontWeight="SemiBold"
+               Margin="0,0,0,8" />
+    <ListBox ItemsSource="{Binding LoadedPlugins}"
+             DisplayMemberBinding="{Binding Display}" />
+  </DockPanel>
+</UserControl>

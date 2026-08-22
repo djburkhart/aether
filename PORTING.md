@@ -409,7 +409,7 @@ Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`) on Linux. `
 - `TransactioningAttributePropertyDescriptor` wraps `SetValue` in `HistoryContext.DoTransaction` so grid edits are undoable
 - Edit > Undo/Redo and a History lister call `HistoryContext` / `CommandHistory` directly
 - `EditorCommandService : CommandServiceBase` stubs `RunContextMenu` (no-op). Menus are Avalonia controls; ATF `ICommandService` is not the host.
-- `--headless-session` smoke: select Bill, edit Size through descriptors, undo, then Open/Save As/reopen a UsingDom XML file
+- `--headless-session` smoke: select Bill, edit Size through descriptors, undo, then Open/Save As/reopen a UsingDom XML file, then resolve the sample plugin from DI
 
 ## File Open / Save
 
@@ -428,11 +428,45 @@ The smaller correct path is Core `DomXmlWriter` / `DomXmlReader` plus Avalonia `
 
 Open replaces the session graph, rebinds selection / property editing, and clears undo history. Save writes the current `DomNode` tree.
 
+---
+
+# Host plugins (DI + AssemblyLoadContext)
+
+First slice of Aether’s modern plugin system. This replaces the **host-level** MEF catalog for *new* editor extensions. It does **not** rewrite `Aether.Atf.Core` / Commands / PropertyEditing off `System.ComponentModel.Composition`.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Host library | `src/Aether.Plugins` |
+| Sample plugin | `samples/plugins/Aether.SamplePlugin` |
+| Load path | `<editor-output>/plugins/<PluginName>/<PluginName>.dll` |
+| DI | `Microsoft.Extensions.DependencyInjection` 10.0.0 |
+| Isolation | Collectible `AssemblyLoadContext` per plugin folder/assembly |
+| Extension point | `IEditorContribution` — the shell adds a Dock.Avalonia tool pane |
+
+The hypothesis held: discover `IPlugin` types, call `Configure(IServiceCollection)`, then `BuildServiceProvider`. Shared contracts (`Aether.Plugins`, `Microsoft.Extensions.*`) load from the default context so `IPlugin` / `IEditorContribution` identity matches the host. The sample plugin does not reference Avalonia; the host owns the dockable and the view.
+
+## What compiled
+
+- `IPlugin`, `IEditorContribution`, `PluginHost`, collectible `PluginLoadContext`
+- Sample `HelloAetherPlugin` registers `hello-aether`
+- Editor copies the sample dll into `plugins/Aether.SamplePlugin/` after build
+- Dock layout: History / Plugins / Hello Aether tabs; Help > About lists loaded plugins
+- `--headless-session` resolves `IEditorContribution` from the `ServiceProvider`
+
+## Unload
+
+ALC is collectible so unload is *possible* after the `ServiceProvider` and all plugin instances are unreachable. This slice **loads at startup only**. `PluginHost.Dispose` disposes the provider and calls `Unload`, but the running editor keeps the host for the process lifetime. No hot-reload.
+
 ## What was excluded / remaining gaps
 
+- Rewriting ATF MEF (`Export` / `Import` on Core / Commands / PropertyEditing)
+- `IDocumentType` / file-format plugins (the chosen point is `IEditorContribution`)
+- Plugin marketplace, versioning policy, signed catalogs
+- Unload-while-running / hot-reload-while-debugging
 - Full `ICommandService` host (menus, keyboard-shortcut table, context menus). `RunContextMenu` is the remaining abstract UI hook.
 - `StandardFileCommands` / `IDocumentClient` / `IDocumentRegistry` / `IFileDialogService` — persistence does not need them yet
-- `StandardEditHistoryCommands` / MEF command clients — skipped so undo did not require a command-host implementation
 - Palette, search, multi-document registry
 - WinForms/WPF, SharpDX, Stride viewport
 - GUI automation (needs a display). CI restore+build plus the headless session flag is the gate.
@@ -468,4 +502,4 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo plus XML round-trip). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI). Windows CI is not required; no Windows-only API remains in the compiled set.

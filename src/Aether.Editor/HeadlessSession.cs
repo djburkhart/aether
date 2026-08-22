@@ -1,6 +1,11 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
+
+using Aether.Plugins;
+
+using Microsoft.Extensions.DependencyInjection;
 
 using Sce.Atf.Controls.PropertyEditing;
 
@@ -30,7 +35,10 @@ namespace Aether.Editor
                 return code;
 
             code = ProveRoundTrip(session);
-            return code;
+            if (code != 0)
+                return code;
+
+            return ProvePlugins(session);
         }
 
         public static int WriteFixture()
@@ -196,6 +204,40 @@ namespace Aether.Editor
             }
 
             Console.WriteLine("headless round-trip ok");
+            return 0;
+        }
+
+        private static int ProvePlugins(EditorSession session)
+        {
+            Console.WriteLine("plugins directory: {0}", session.PluginHost.Directory);
+            Console.WriteLine("loaded plugins: {0}", session.LoadedPlugins.Count);
+            foreach (LoadedPlugin plugin in session.LoadedPlugins)
+                Console.WriteLine("  {0}", plugin.Display);
+
+            if (session.LoadedPlugins.Count == 0)
+            {
+                Console.Error.WriteLine("Error: no plugins loaded from {0}", session.PluginHost.Directory);
+                return 20;
+            }
+
+            IEditorContribution? hello = session.Contributions.FirstOrDefault(c => c.Id == "hello-aether");
+            if (hello == null)
+            {
+                Console.Error.WriteLine("Error: IEditorContribution 'hello-aether' was not registered.");
+                return 21;
+            }
+
+            IEditorContribution? fromDi = session.PluginHost.Services
+                .GetServices<IEditorContribution>()
+                .FirstOrDefault(c => c.Id == "hello-aether");
+            if (fromDi == null)
+            {
+                Console.Error.WriteLine("Error: DI did not resolve IEditorContribution 'hello-aether'.");
+                return 22;
+            }
+
+            Console.WriteLine("contribution: {0} — {1}", hello.Title, hello.Description);
+            Console.WriteLine("headless plugins ok");
             return 0;
         }
 

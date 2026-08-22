@@ -1,3 +1,5 @@
+using Aether.Plugins;
+
 using Dock.Model.Mvvm.Controls;
 
 namespace Aether.Editor.Dock
@@ -45,5 +47,35 @@ namespace Aether.Editor.Dock
         }
 
         public EditorSession Session { get; }
+    }
+
+    /// <summary>
+    /// Catalog of host-level plugins loaded via ALC + DI.</summary>
+    public sealed class PluginsTool : Tool
+    {
+        public PluginsTool(EditorSession session)
+        {
+            Session = session;
+            Id = "Plugins";
+            Title = "Plugins";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
+    /// Dockable created by the host for an <see cref="IEditorContribution"/>.</summary>
+    public sealed class ContributionTool : Tool
+    {
+        public ContributionTool(IEditorContribution contribution)
+        {
+            Contribution = contribution;
+            Id = "contribution:" + contribution.Id;
+            Title = contribution.Title;
+            CanClose = false;
+        }
+
+        public IEditorContribution Contribution { get; }
     }
 }

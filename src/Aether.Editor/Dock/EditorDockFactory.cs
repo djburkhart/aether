@@ -22,6 +22,11 @@ namespace Aether.Editor.Dock
             var objects = new ObjectsDocument(m_session);
             var properties = new PropertiesTool(m_session);
             var history = new HistoryTool(m_session);
+            var plugins = new PluginsTool(m_session);
+
+            var bottomTools = new System.Collections.Generic.List<IDockable> { history, plugins };
+            foreach (var contribution in m_session.Contributions)
+                bottomTools.Add(new ContributionTool(contribution));
 
             var documents = new DocumentDock
             {
@@ -49,7 +54,7 @@ namespace Aether.Editor.Dock
                 Id = "HistoryDock",
                 Title = "History",
                 Alignment = Alignment.Bottom,
-                VisibleDockables = CreateList<IDockable>(history),
+                VisibleDockables = CreateList<IDockable>(bottomTools.ToArray()),
                 ActiveDockable = history
             };
 

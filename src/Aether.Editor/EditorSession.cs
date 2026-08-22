@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+
+using Aether.Plugins;
 
 using Sce.Atf.Adaptation;
 using Sce.Atf.Applications;
@@ -30,6 +33,7 @@ namespace Aether.Editor
             Objects = new ObservableCollection<GameObjectItem>();
             HistoryItems = new ObservableCollection<string>();
             PropertyEditing = new SelectionPropertyEditingContext();
+            PluginHost = PluginHost.Load(PluginLocator.DefaultDirectory);
             New();
         }
 
@@ -48,6 +52,18 @@ namespace Aether.Editor
         public ObservableCollection<GameObjectItem> Objects { get; }
 
         public ObservableCollection<string> HistoryItems { get; }
+
+        public PluginHost PluginHost { get; }
+
+        public IReadOnlyList<LoadedPlugin> LoadedPlugins
+        {
+            get { return PluginHost.Plugins; }
+        }
+
+        public IReadOnlyList<IEditorContribution> Contributions
+        {
+            get { return PluginHost.Contributions; }
+        }
 
         public string? FilePath
         {
