@@ -5,10 +5,8 @@
 // instance file. Adds PropertyEditingContext read/write on selected nodes.
 
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.Reflection;
 using System.Text;
 
 using Sce.Atf.Controls.PropertyEditing;
@@ -25,7 +23,7 @@ namespace UsingDom
     {
         public static int Main(string[] args)
         {
-            string schemaPath = FindGameSchema();
+            string schemaPath = GameDocument.FindSchemaPath();
             if (schemaPath == null)
             {
                 Console.Error.WriteLine("Error: could not find testdata/atf/UsingDom/game.xsd");
@@ -36,14 +34,14 @@ namespace UsingDom
             Console.WriteLine("schema: {0}", schemaPath);
 
             var loader = new GameSchemaLoader(schemaPath);
-            DomNode game = CreateGameUsingDomNode();
+            DomNode game = GameDocument.CreateOgreAdventureII();
 
             Console.WriteLine();
             Console.WriteLine("=== document (ATF UsingDom CreateGameUsingDomNode) ===");
             Print(game);
 
-            DomNode ogre = FindChild(game, "Bill");
-            DomNode dwarf = FindChild(game, "Sally");
+            DomNode ogre = GameDocument.FindChild(game, "Bill");
+            DomNode dwarf = GameDocument.FindChild(game, "Sally");
             if (ogre == null || dwarf == null)
             {
                 Console.Error.WriteLine("Error: UsingDom document is missing Bill or Sally.");
@@ -64,33 +62,6 @@ namespace UsingDom
             Console.WriteLine("=== saved XML ===");
             Console.WriteLine(WriteXml(game, loader.TypeCollection));
             return 0;
-        }
-
-        /// <summary>
-        /// Creates the UsingDom sample game by constructing DomNodes (ATF Program.CreateGameUsingDomNode).</summary>
-        private static DomNode CreateGameUsingDomNode()
-        {
-            DomNode game = new DomNode(GameSchema.gameType.Type, GameSchema.gameRootElement);
-            game.SetAttribute(GameSchema.gameType.nameAttribute, "Ogre Adventure II");
-            IList<DomNode> childList = game.GetChildList(GameSchema.gameType.gameObjectChild);
-
-            DomNode ogre = new DomNode(GameSchema.ogreType.Type);
-            ogre.SetAttribute(GameSchema.ogreType.nameAttribute, "Bill");
-            ogre.SetAttribute(GameSchema.ogreType.sizeAttribute, 12);
-            ogre.SetAttribute(GameSchema.ogreType.strengthAttribute, 100);
-            childList.Add(ogre);
-
-            DomNode dwarf = new DomNode(GameSchema.dwarfType.Type);
-            dwarf.SetAttribute(GameSchema.dwarfType.nameAttribute, "Sally");
-            dwarf.SetAttribute(GameSchema.dwarfType.ageAttribute, 32);
-            dwarf.SetAttribute(GameSchema.dwarfType.experienceAttribute, 55);
-            childList.Add(dwarf);
-
-            DomNode tree = new DomNode(GameSchema.treeType.Type);
-            tree.SetAttribute(GameSchema.treeType.nameAttribute, "Mr. Oak");
-            childList.Add(tree);
-
-            return game;
         }
 
         private static void EditOgre(DomNode ogre)
@@ -153,17 +124,6 @@ namespace UsingDom
             return null;
         }
 
-        private static DomNode FindChild(DomNode game, string name)
-        {
-            foreach (DomNode child in game.Children)
-            {
-                object value = child.GetAttribute(child.Type.GetAttributeInfo("name"));
-                if (name.Equals(value))
-                    return child;
-            }
-            return null;
-        }
-
         private static void Print(DomNode game)
         {
             Console.WriteLine("Game: {0}", game.GetAttribute(game.Type.GetAttributeInfo("name")));
@@ -183,28 +143,6 @@ namespace UsingDom
                 writer.Write(game, stream, new Uri("game.xml", UriKind.Relative));
                 return Encoding.UTF8.GetString(stream.ToArray());
             }
-        }
-
-        private static string FindGameSchema()
-        {
-            string nextToExe = Path.Combine(AppContext.BaseDirectory, "game.xsd");
-            if (File.Exists(nextToExe))
-                return Path.GetFullPath(nextToExe);
-
-            string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            while (!string.IsNullOrEmpty(dir))
-            {
-                string candidate = Path.Combine(dir, "testdata", "atf", "UsingDom", "game.xsd");
-                if (File.Exists(candidate))
-                    return Path.GetFullPath(candidate);
-                dir = Path.GetDirectoryName(dir);
-            }
-
-            string cwd = Path.Combine(Directory.GetCurrentDirectory(), "testdata", "atf", "UsingDom", "game.xsd");
-            if (File.Exists(cwd))
-                return Path.GetFullPath(cwd);
-
-            return null;
         }
     }
 }

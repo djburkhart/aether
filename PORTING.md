@@ -1,6 +1,6 @@
 # ATF Atf.Core → net10.0 port notes
 
-Phase 0 first build signal. This is a retarget of SonyWWS `Framework/Atf.Core` into a modern SDK-style class library. The DOM architecture is unchanged. There is no GUI, no Stride runtime, and no Avalonia host in this change.
+Phase 0 first build signal. This is a retarget of SonyWWS `Framework/Atf.Core` into a modern SDK-style class library. The DOM architecture is unchanged. The Avalonia host is a later Phase 1 slice (`src/Aether.Editor`, below).
 
 ## Source
 
@@ -348,7 +348,8 @@ UsingDom has **no XML instance file** in the ATF repo. The document is `CreateGa
 
 ## What compiled
 
-- `GameSchemaLoader` — file-path load of `testdata/atf/UsingDom/game.xsd`, `GameSchema.Initialize`, `CustomTypeDescriptorNodeAdapter`, `AttributePropertyDescriptor` registration
+- `samples/UsingDom.Document` — shared `GameSchemaLoader`, `GameDocument.CreateOgreAdventureII`, transactioning attribute descriptors
+- `GameSchemaLoader` — file-path load of `testdata/atf/UsingDom/game.xsd`, `GameSchema.Initialize`, `ObservableCustomTypeDescriptorNodeAdapter`, `HistoryContext`, `SelectionContext`, descriptor registration
 - `Program` — ATF document construction, property-edit before/after on Bill and Sally, XML dump
 - Linked `GameSchema.cs` fixture (not a second copy). Sample build runs `aether-domgen --check` so the fixture cannot drift.
 
@@ -373,6 +374,58 @@ dotnet run -c Release --project samples/UsingDom
 ```
 
 CI runs the same `dotnet run` after the DomGen `--check` smoke.
+
+---
+
+# Phase 1 Avalonia application shell
+
+First tools-host slice. A real Avalonia 12 desktop window that hosts the already-ported ATF core against the UsingDom document. Not the full editor: no file documents, no palette, no viewport, no MEF catalog.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Destination | `src/Aether.Editor` (`Aether.Editor.csproj`) |
+| Shared document | `samples/UsingDom.Document` (schema load + Ogre Adventure II graph) |
+| Destination TFM | `net10.0` |
+| UI | Avalonia 12.1.0, `StartWithClassicDesktopLifetime` |
+| Docking | [Dock.Avalonia](https://github.com/wieslawsoltes/Dock) 12.1.0.4 + `Dock.Model.Mvvm` + `Dock.Avalonia.Themes.Fluent` |
+| Property grid | [bodong.Avalonia.PropertyGrid](https://github.com/bodong1987/Avalonia.PropertyGrid) 12.0.4.1 |
+| Window title | `Aether` (ATF origin is in Help > About and `NOTICE` only) |
+
+Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`) on Linux. `dotnet run --project src/Aether.Editor -- --headless-session` constructs the same `EditorSession` the window hosts. A display is required to open the desktop window; this change does not claim the GUI was clicked in CI.
+
+## Why these libraries
+
+**Dock.Avalonia** is the maintained Avalonia docking system (wieslawsoltes). This slice uses the documented view-model + `DataTemplate` pattern: `ObjectsDocument` / `PropertiesTool` / `HistoryTool` subclasses of Dock `Document`/`Tool`, mapped in `App.axaml`. `Document.Content` is not a property on `Dock.Model.Mvvm` 12.1; do not invent a splitter-only “dock”.
+
+**bodong.Avalonia.PropertyGrid** is a maintained Avalonia grid that binds `DataContext` and documents support for `ICustomTypeDescriptor` / custom `PropertyDescriptor`s. The pane binds to `node.As<ICustomTypeDescriptor>()` (`ObservableCustomTypeDescriptorNodeAdapter`), not the raw `DomNode`. WinForms `PropertyGrid` was not ported.
+
+## What compiled
+
+- Main window, File / Edit / Help menus, Dock.Avalonia layout (Objects document + Properties + History tools)
+- Object list: Bill (ogre), Sally (dwarf), Mr. Oak (tree)
+- Selection → `SelectionContext` + `SelectionPropertyEditingContext`; property grid `DataContext` = ATF adapter
+- `TransactioningAttributePropertyDescriptor` wraps `SetValue` in `HistoryContext.DoTransaction` so grid edits are undoable
+- Edit > Undo/Redo and a History lister call `HistoryContext` / `CommandHistory` directly
+- `EditorCommandService : CommandServiceBase` stubs `RunContextMenu` (no-op). Menus are Avalonia controls; ATF `ICommandService` is not the host.
+- `--headless-session` smoke: select Bill, edit Size through descriptors, undo
+
+## What was excluded / remaining gaps
+
+- Full `ICommandService` host (menus, keyboard-shortcut table, context menus). `RunContextMenu` is the remaining abstract UI hook.
+- `StandardEditHistoryCommands` / MEF command clients — skipped so undo did not require a command-host implementation
+- File open/save, document registry, palette, search
+- WinForms/WPF, SharpDX, Stride viewport
+- GUI automation (needs a display). CI restore+build plus the headless session flag is the gate.
+
+## Run
+
+```bash
+dotnet build Aether.sln -c Release
+dotnet run -c Release --project src/Aether.Editor
+dotnet run -c Release --project src/Aether.Editor -- --headless-session
+```
 
 ## License / attribution
 

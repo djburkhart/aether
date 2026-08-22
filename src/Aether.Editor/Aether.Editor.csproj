@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Aether.Editor</RootNamespace>
+    <AssemblyName>Aether.Editor</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Deterministic>true</Deterministic>
+    <Description>Phase 1 Avalonia shell hosting ATF UsingDom + property editing.</Description>
+    <Product>Aether Engine</Product>
+    <Authors>Resolvora LLC</Authors>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <PackageReference Include="Dock.Avalonia" Version="12.1.0.4" />
+    <PackageReference Include="Dock.Model.Mvvm" Version="12.1.0.4" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.4" />
+    <PackageReference Include="bodong.Avalonia.PropertyGrid" Version="12.0.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Commands\Aether.Atf.Commands.csproj" />
+    <ProjectReference Include="..\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

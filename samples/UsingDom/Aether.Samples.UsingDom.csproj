@@ -23,11 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\testdata\atf\UsingDom\GameSchema.cs" Link="GameSchema.cs" />
-    <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <ProjectReference Include="..\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
     <ProjectReference Include="..\..\src\Aether.Atf.Core\Aether.Atf.Core.csproj" />
     <ProjectReference Include="..\..\src\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
     <ProjectReference Include="..\..\src\Aether.Atf.DomGen.Cli\Aether.Atf.DomGen.Cli.csproj">
@@ -35,7 +31,10 @@
     </ProjectReference>
   </ItemGroup>
 
-  <!-- Keep the compiled GameSchema.cs identical to aether-domgen output. -->
+  <ItemGroup>
+    <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="VerifyGeneratedGameSchema" BeforeTargets="CoreCompile">
     <PropertyGroup>
       <_DomGenDll>$(MSBuildThisFileDirectory)..\..\src\Aether.Atf.DomGen.Cli\bin\$(Configuration)\net10.0\aether-domgen.dll</_DomGenDll>

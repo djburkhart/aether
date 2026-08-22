@@ -32,3 +32,6 @@ jobs:
 
       - name: UsingDom sample
         run: dotnet run --no-build -c Release --project samples/UsingDom
+
+      - name: Aether.Editor headless session
+        run: dotnet run --no-build -c Release --project src/Aether.Editor -- --headless-session
