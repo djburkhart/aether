@@ -12,6 +12,9 @@
     <DataTemplate DataType="dockables:CircuitGraphDocument">
       <views:CircuitView DataContext="{Binding Session}" />
     </DataTemplate>
+    <DataTemplate DataType="dockables:TimelineDocument">
+      <views:TimelineView DataContext="{Binding Session}" />
+    </DataTemplate>
     <DataTemplate DataType="dockables:PropertiesTool">
       <views:PropertiesView DataContext="{Binding Session}" />
     </DataTemplate>

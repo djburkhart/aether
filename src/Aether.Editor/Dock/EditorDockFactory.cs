@@ -6,7 +6,7 @@ using Dock.Model.Mvvm.Controls;
 namespace Aether.Editor.Dock
 {
     /// <summary>
-    /// Dock.Avalonia factory: document panes (objects, circuit) + tool panes (properties, history).
+    /// Dock.Avalonia factory: document panes (objects, circuit, timeline) + tool panes (properties, history).
     /// Views are resolved by App.axaml DataTemplates for the dockable types.</summary>
     public sealed class EditorDockFactory : Factory
     {
@@ -21,6 +21,7 @@ namespace Aether.Editor.Dock
         {
             var objects = new ObjectsDocument(m_session);
             var circuit = new CircuitGraphDocument(m_session);
+            var timeline = new TimelineDocument(m_session);
             var properties = new PropertiesTool(m_session);
             var history = new HistoryTool(m_session);
             var plugins = new PluginsTool(m_session);
@@ -36,8 +37,8 @@ namespace Aether.Editor.Dock
                 IsCollapsable = false,
                 CanCreateDocument = false,
                 Proportion = 0.62,
-                VisibleDockables = CreateList<IDockable>(objects, circuit),
-                ActiveDockable = circuit
+                VisibleDockables = CreateList<IDockable>(objects, circuit, timeline),
+                ActiveDockable = timeline
             };
 
             var propertiesDock = new ToolDock

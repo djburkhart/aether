@@ -6,6 +6,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 
 using Aether.Circuit;
+using Aether.Timeline;
 using Aether.Plugins;
 
 using Sce.Atf.Adaptation;
@@ -19,7 +20,8 @@ namespace Aether.Editor
 {
     /// <summary>
     /// Session for the Phase 1 shell: UsingDom document, CircuitEditor graph,
-    /// ATF selection/property contexts, HistoryContext undo, and DomXml Open/Save.
+    /// TimelineEditor tracks/intervals, ATF selection/property contexts,
+    /// HistoryContext undo, and DomXml Open/Save.
     /// Menus call this directly; StandardFileCommands / IDocumentService are not
     /// the host.</summary>
     public sealed class EditorSession : INotifyPropertyChanged
@@ -38,6 +40,8 @@ namespace Aether.Editor
             PluginHost = PluginHost.Load(PluginLocator.DefaultDirectory);
             Circuit = new CircuitSession();
             Circuit.PropertyChanged += OnCircuitPropertyChanged;
+            Timeline = new TimelineSession();
+            Timeline.PropertyChanged += OnTimelinePropertyChanged;
             New();
         }
 
@@ -61,6 +65,8 @@ namespace Aether.Editor
 
         public CircuitSession Circuit { get; }
 
+        public TimelineSession Timeline { get; }
+
         public EditorDocumentKind ActiveKind
         {
             get { return m_activeKind; }
@@ -78,7 +84,14 @@ namespace Aether.Editor
 
         public string? FilePath
         {
-            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.FilePath : m_filePath; }
+            get
+            {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.FilePath;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.FilePath;
+                return m_filePath;
+            }
             private set
             {
                 if (m_filePath == value)
@@ -98,7 +111,14 @@ namespace Aether.Editor
 
         public bool IsDirty
         {
-            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.IsDirty : History.Dirty; }
+            get
+            {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.IsDirty;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.IsDirty;
+                return History.Dirty;
+            }
         }
 
         public string WindowTitle
@@ -107,6 +127,8 @@ namespace Aether.Editor
             {
                 if (m_activeKind == EditorDocumentKind.Circuit)
                     return Circuit.WindowTitle;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.WindowTitle;
                 string name = m_filePath != null ? Path.GetFileName(m_filePath) : "Aether";
                 return IsDirty ? name + " *" : name;
             }
@@ -126,6 +148,7 @@ namespace Aether.Editor
                 {
                     m_activeKind = EditorDocumentKind.Game;
                     Circuit.SelectedNode = null;
+                    Timeline.SelectedInterval = null;
                     Selection.Selection.SetRange(new object[] { value.Node });
                     PropertyEditing.SelectionContext = Selection;
                     PropertyTarget = value.Node.As<ICustomTypeDescriptor>();
@@ -154,6 +177,8 @@ namespace Aether.Editor
             {
                 if (m_activeKind == EditorDocumentKind.Circuit)
                     return Circuit.StatusText;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.StatusText;
                 string doc = m_filePath != null ? Path.GetFileName(m_filePath) : "untitled";
                 string sel = m_selectedObject == null
                     ? "select an object"
@@ -164,12 +189,26 @@ namespace Aether.Editor
 
         public bool CanUndo
         {
-            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.CanUndo : History.CanUndo; }
+            get
+            {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.CanUndo;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.CanUndo;
+                return History.CanUndo;
+            }
         }
 
         public bool CanRedo
         {
-            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.CanRedo : History.CanRedo; }
+            get
+            {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.CanRedo;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.CanRedo;
+                return History.CanRedo;
+            }
         }
 
         public string UndoText
@@ -178,6 +217,8 @@ namespace Aether.Editor
             {
                 if (m_activeKind == EditorDocumentKind.Circuit)
                     return Circuit.UndoText;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.UndoText;
                 return History.CanUndo
                     ? "Undo " + History.UndoDescription
                     : "Undo";
@@ -190,6 +231,8 @@ namespace Aether.Editor
             {
                 if (m_activeKind == EditorDocumentKind.Circuit)
                     return Circuit.RedoText;
+                if (m_activeKind == EditorDocumentKind.Timeline)
+                    return Timeline.RedoText;
                 return History.CanRedo
                     ? "Redo " + History.RedoDescription
                     : "Redo";
@@ -211,6 +254,12 @@ namespace Aether.Editor
                 ActivateCircuit();
                 return;
             }
+            if (TimelineDocuments.IsTimelineDocument(path))
+            {
+                Timeline.Open(path);
+                ActivateTimeline();
+                return;
+            }
 
             BindDocument(GameDocument.ReadXml(path, Loader), Path.GetFullPath(path));
             m_activeKind = EditorDocumentKind.Game;
@@ -222,6 +271,12 @@ namespace Aether.Editor
             if (m_activeKind == EditorDocumentKind.Circuit)
             {
                 Circuit.Save();
+                NotifyFileState();
+                return;
+            }
+            if (m_activeKind == EditorDocumentKind.Timeline)
+            {
+                Timeline.Save();
                 NotifyFileState();
                 return;
             }
@@ -237,6 +292,12 @@ namespace Aether.Editor
             if (m_activeKind == EditorDocumentKind.Circuit)
             {
                 Circuit.SaveAs(path);
+                NotifyFileState();
+                return;
+            }
+            if (m_activeKind == EditorDocumentKind.Timeline)
+            {
+                Timeline.SaveAs(path);
                 NotifyFileState();
                 return;
             }
@@ -258,6 +319,13 @@ namespace Aether.Editor
                 NotifyHistoryCommands();
                 return;
             }
+            if (m_activeKind == EditorDocumentKind.Timeline)
+            {
+                Timeline.Undo();
+                RefreshTimelinePropertyTarget();
+                NotifyHistoryCommands();
+                return;
+            }
             if (History.CanUndo)
                 History.Undo();
             NotifyHistoryCommands();
@@ -273,6 +341,13 @@ namespace Aether.Editor
                 NotifyHistoryCommands();
                 return;
             }
+            if (m_activeKind == EditorDocumentKind.Timeline)
+            {
+                Timeline.Redo();
+                RefreshTimelinePropertyTarget();
+                NotifyHistoryCommands();
+                return;
+            }
             if (History.CanRedo)
                 History.Redo();
             NotifyHistoryCommands();
@@ -283,6 +358,12 @@ namespace Aether.Editor
         {
             Circuit.AddAndWithWire();
             ActivateCircuit();
+        }
+
+        public void AddTimelineInterval()
+        {
+            Timeline.AddInterval();
+            ActivateTimeline();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -404,12 +485,71 @@ namespace Aether.Editor
                 m_selectedObject = null;
                 OnPropertyChanged(nameof(SelectedObject));
             }
+            Timeline.SelectedInterval = null;
 
             PropertyEditing.SelectionContext = Circuit.Selection;
             RefreshCircuitPropertyTarget();
             OnPropertyChanged(nameof(ActiveKind));
             NotifyHistoryCommands();
             NotifyFileState();
+        }
+
+        private void ActivateTimeline()
+        {
+            m_activeKind = EditorDocumentKind.Timeline;
+            if (m_selectedObject != null)
+            {
+                m_selectedObject = null;
+                OnPropertyChanged(nameof(SelectedObject));
+            }
+            Circuit.SelectedNode = null;
+
+            PropertyEditing.SelectionContext = Timeline.Selection;
+            RefreshTimelinePropertyTarget();
+            OnPropertyChanged(nameof(ActiveKind));
+            NotifyHistoryCommands();
+            NotifyFileState();
+        }
+
+        private void RefreshTimelinePropertyTarget()
+        {
+            PropertyTarget = Timeline.SelectedInterval != null
+                ? Timeline.SelectedInterval.Interval.DomNode.As<ICustomTypeDescriptor>()
+                : null;
+            OnPropertyChanged(nameof(PropertyTarget));
+            OnPropertyChanged(nameof(StatusText));
+        }
+
+        private void OnTimelinePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(TimelineSession.SelectedInterval))
+            {
+                if (Timeline.SelectedInterval != null)
+                    ActivateTimeline();
+                return;
+            }
+
+            if (m_activeKind != EditorDocumentKind.Timeline)
+                return;
+
+            if (e.PropertyName == nameof(TimelineSession.CanUndo) ||
+                e.PropertyName == nameof(TimelineSession.CanRedo) ||
+                e.PropertyName == nameof(TimelineSession.UndoText) ||
+                e.PropertyName == nameof(TimelineSession.RedoText))
+            {
+                NotifyHistoryCommands();
+            }
+
+            if (e.PropertyName == nameof(TimelineSession.IsDirty) ||
+                e.PropertyName == nameof(TimelineSession.WindowTitle) ||
+                e.PropertyName == nameof(TimelineSession.StatusText) ||
+                e.PropertyName == nameof(TimelineSession.CanSave) ||
+                e.PropertyName == nameof(TimelineSession.FilePath))
+            {
+                NotifyFileState();
+                OnPropertyChanged(nameof(FilePath));
+                OnPropertyChanged(nameof(CanSave));
+            }
         }
 
         private void RefreshCircuitPropertyTarget()
@@ -482,7 +622,8 @@ namespace Aether.Editor
     public enum EditorDocumentKind
     {
         Game,
-        Circuit
+        Circuit,
+        Timeline
     }
 
     public sealed class GameObjectItem

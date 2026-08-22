@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 
 using Aether.Circuit;
+using Aether.Timeline;
 using Aether.Plugins;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -43,7 +44,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProveCircuit(session);
+            code = ProveCircuit(session);
+            if (code != 0)
+                return code;
+
+            return ProveTimeline(session);
         }
 
         public static int WriteFixture()
@@ -379,6 +384,127 @@ namespace Aether.Editor
             }
 
             Console.WriteLine("headless circuit ok");
+            return 0;
+        }
+
+        private static int ProveTimeline(EditorSession session)
+        {
+            string? fixture = TimelineDocuments.FindSampleDocumentPath();
+            if (fixture == null)
+            {
+                Console.Error.WriteLine("Error: could not find testdata/atf/TimelineEditor/100.timeline");
+                return 50;
+            }
+
+            Console.WriteLine("timeline fixture: {0}", fixture);
+            session.Open(fixture);
+            if (session.ActiveKind != EditorDocumentKind.Timeline)
+            {
+                Console.Error.WriteLine("Error: Open of 100.timeline did not activate the timeline document.");
+                return 51;
+            }
+
+            int tracks = session.Timeline.TrackCount;
+            int intervals = session.Timeline.Intervals.Count;
+            Console.WriteLine("timeline tracks: {0}", tracks);
+            Console.WriteLine("timeline intervals: {0}", intervals);
+            if (tracks != TimelineDocuments.ExampleTrackCount || intervals != TimelineDocuments.ExampleIntervalCount)
+            {
+                Console.Error.WriteLine(
+                    "Error: 100.timeline should have {0} tracks and {1} intervals, got {2}/{3}.",
+                    TimelineDocuments.ExampleTrackCount,
+                    TimelineDocuments.ExampleIntervalCount,
+                    tracks,
+                    intervals);
+                return 52;
+            }
+
+            TimelineIntervalItem? clip = session.Timeline.Find("Interval");
+            if (clip == null)
+            {
+                Console.Error.WriteLine("Error: 100.timeline is missing Interval.");
+                return 53;
+            }
+
+            session.Timeline.SelectedInterval = clip;
+            if (session.PropertyTarget == null)
+            {
+                Console.Error.WriteLine("Error: selecting Interval did not produce an ICustomTypeDescriptor target.");
+                return 54;
+            }
+
+            PropertyDescriptor? name = FindDescriptor(session, "Name");
+            if (name == null)
+            {
+                Console.Error.WriteLine("Error: selected Interval is missing Name descriptor.");
+                return 55;
+            }
+
+            object? before = name.GetValue(session.PropertyTarget);
+            Console.WriteLine("Interval Name before: {0}", before);
+            PropertyUtils.SetProperty(clip.Interval.DomNode, name, "Clip");
+            object? after = name.GetValue(session.PropertyTarget);
+            Console.WriteLine("Interval Name after edit: {0}", after);
+            if (!Equals(after, "Clip"))
+            {
+                Console.Error.WriteLine("Error: timeline property edit did not change the interval name.");
+                return 56;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: timeline HistoryContext did not record the edit.");
+                return 57;
+            }
+
+            session.Undo();
+            object? undone = name.GetValue(session.PropertyTarget ?? (object)clip.Interval.DomNode);
+            Console.WriteLine("Interval Name after undo: {0}", undone);
+            if (!Equals(undone, before))
+            {
+                Console.Error.WriteLine("Error: timeline undo did not restore Name.");
+                return 58;
+            }
+
+            session.AddTimelineInterval();
+            int afterAdd = session.Timeline.Intervals.Count;
+            Console.WriteLine("timeline after add: {0} intervals", afterAdd);
+            if (afterAdd != TimelineDocuments.ExampleIntervalCount + 1)
+            {
+                Console.Error.WriteLine("Error: Add Interval should add one interval.");
+                return 59;
+            }
+
+            string temp = Path.Combine(Path.GetTempPath(), "aether-timeline-roundtrip-" + Guid.NewGuid().ToString("N") + ".timeline");
+            try
+            {
+                session.SaveAs(temp);
+                session.Timeline.LoadExample();
+                session.Open(temp);
+                if (session.Timeline.Intervals.Count != afterAdd ||
+                    session.Timeline.TrackCount != TimelineDocuments.ExampleTrackCount)
+                {
+                    Console.Error.WriteLine(
+                        "Error: reopened timeline should have {0} intervals and {1} tracks, got {2}/{3}.",
+                        afterAdd,
+                        TimelineDocuments.ExampleTrackCount,
+                        session.Timeline.Intervals.Count,
+                        session.Timeline.TrackCount);
+                    return 60;
+                }
+
+                if (session.Timeline.Find("Interval") == null)
+                {
+                    Console.Error.WriteLine("Error: reopened timeline is missing Interval.");
+                    return 61;
+                }
+            }
+            finally
+            {
+                try { File.Delete(temp); } catch (IOException) { }
+            }
+
+            Console.WriteLine("headless timeline ok");
             return 0;
         }
 
