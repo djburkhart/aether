@@ -338,6 +338,42 @@ The hypothesis held. DomGen is XML schema walk + C# text emit. `SchemaLoader` su
 3. **Unit tests** for `-annotatedOnly` / imports (`test_customized.xsd`) were not ported.
 4. **`dotnet tool install`** is not published to NuGet in this PR; run the project (`dotnet run --project src/Aether.Atf.DomGen.Cli`).
 
+---
+
+# UsingDom headless sample
+
+Phase 0 stack proof. `samples/UsingDom` loads ATF `Samples/UsingDom` `game.xsd`, uses DomGen `GameSchema` types, builds the same in-memory document ATF’s sample constructs in code, and edits attributes through `PropertyEditingContext` / `AttributePropertyDescriptor`.
+
+UsingDom has **no XML instance file** in the ATF repo. The document is `CreateGameUsingDomNode()`: game “Ogre Adventure II”, ogre Bill (size 12, strength 100), dwarf Sally (age 32, experience 55), tree “Mr. Oak”. This sample uses that graph, then writes the edited DOM with `DomXmlWriter`.
+
+## What compiled
+
+- `GameSchemaLoader` — file-path load of `testdata/atf/UsingDom/game.xsd`, `GameSchema.Initialize`, `CustomTypeDescriptorNodeAdapter`, `AttributePropertyDescriptor` registration
+- `Program` — ATF document construction, property-edit before/after on Bill and Sally, XML dump
+- Linked `GameSchema.cs` fixture (not a second copy). Sample build runs `aether-domgen --check` so the fixture cannot drift.
+
+## What was adapted
+
+| File | Change |
+|---|---|
+| `GameSchemaLoader.cs` | Load from testdata path instead of embedded `ResourceStreamResolver`. Register property-editing extensions/descriptors. Dropped Game/Ogre/Dwarf adapters and validators (not needed for this proof). |
+| `Program.cs` | Same document as ATF `CreateGameUsingDomNode`. Added `PropertyEditingContext` + `PropertyUtils.SetProperty` and XML print. No `data\game.xml` side-effect. |
+
+## What was excluded
+
+- UsingDom `DomNodeAdapters` (Game / GameObject / Ogre / Dwarf)
+- WinForms/WPF, Avalonia, Stride
+- Invented schemas or fake documents
+
+## Run
+
+```bash
+dotnet build Aether.sln -c Release
+dotnet run -c Release --project samples/UsingDom
+```
+
+CI runs the same `dotnet run` after the DomGen `--check` smoke.
+
 ## License / attribution
 
 - Apache License 2.0 (`LICENSE`).
@@ -357,4 +393,8 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
   Game.UsingDom UsingDom --check
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, then runs the DomGen `--check` smoke. Windows CI is not required; no Windows-only API remains in the compiled set.
+```bash
+dotnet run -c Release --project samples/UsingDom
+```
+
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, then `dotnet run`s `samples/UsingDom`. Windows CI is not required; no Windows-only API remains in the compiled set.

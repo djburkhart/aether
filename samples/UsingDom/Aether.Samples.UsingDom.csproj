@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>UsingDom</RootNamespace>
+    <AssemblyName>Aether.Samples.UsingDom</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <Copyright>Copyright © 2014 Sony Computer Entertainment America LLC</Copyright>
+    <Company>Sony Computer Entertainment America LLC</Company>
+    <Product>Aether Engine</Product>
+    <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
+    <Description>
+      Headless Phase 0 sample: ATF UsingDom schema + DomGen GameSchema types +
+      a real UsingDom document + property-editing descriptors/contexts.
+    </Description>
+    <AssemblyTitle>Aether.Samples.UsingDom</AssemblyTitle>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\testdata\atf\UsingDom\GameSchema.cs" Link="GameSchema.cs" />
+    <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+    <ProjectReference Include="..\..\src\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\..\src\Aether.Atf.DomGen.Cli\Aether.Atf.DomGen.Cli.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Keep the compiled GameSchema.cs identical to aether-domgen output. -->
+  <Target Name="VerifyGeneratedGameSchema" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_DomGenDll>$(MSBuildThisFileDirectory)..\..\src\Aether.Atf.DomGen.Cli\bin\$(Configuration)\net10.0\aether-domgen.dll</_DomGenDll>
+      <_GameXsd>$(MSBuildThisFileDirectory)..\..\testdata\atf\UsingDom\game.xsd</_GameXsd>
+      <_GameSchemaCs>$(MSBuildThisFileDirectory)..\..\testdata\atf\UsingDom\GameSchema.cs</_GameSchemaCs>
+    </PropertyGroup>
+    <Exec Command="dotnet exec &quot;$(_DomGenDll)&quot; &quot;$(_GameXsd)&quot; &quot;$(_GameSchemaCs)&quot; Game.UsingDom UsingDom --check" />
+  </Target>
+
+</Project>
