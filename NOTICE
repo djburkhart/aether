@@ -20,7 +20,10 @@ describe origin, per Apache License section 6.
 `src/Aether.Atf.Core` is a derivative of SonyWWS ATF `Framework/Atf.Core`
 (namespace `Sce.Atf`). `src/Aether.Atf.Commands` is a derivative of the
 logic-only command / undo / history / document slice of
-`Framework/Atf.Gui`. See PORTING.md for the portable subset and cuts.
+`Framework/Atf.Gui`. `src/Aether.Atf.PropertyEditing` is a derivative of
+the logic-only property-editing types from `Framework/Atf.Gui`
+(`Controls/PropertyEditing` and DOM property-descriptor adapters).
+See PORTING.md for the portable subset and cuts.
 
 Stride Engine (MIT), used as the preferred runtime foundation:
 https://github.com/stride3d/stride
