@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<game xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Ogre Adventure II" xmlns="Game.UsingDom">
+	<gameObject xsi:type="ogreType" name="Bill" size="12" strength="100" />
+	<gameObject xsi:type="dwarfType" name="Sally" age="32" experience="55" />
+	<gameObject xsi:type="treeType" name="Mr. Oak" />
+</game>

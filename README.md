@@ -10,7 +10,7 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 1 first slice. The ATF tools core from Phase 0 is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia layout, UsingDom object list, and a property pane bound to ATF descriptors. This is an application shell, not the full editor. No Stride viewport. See [PORTING.md](PORTING.md).
+Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia layout, UsingDom object list, property pane, HistoryContext undo, and File Open/Save of UsingDom XML. This is an application shell, not the full editor. No Stride viewport. See [PORTING.md](PORTING.md).
 
 Phase 0 (merged): `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen` / `aether-domgen`, and the headless UsingDom sample.
 
@@ -31,7 +31,7 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 dotnet run -c Release --project samples/UsingDom
 ```
 
-`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). `--headless-session` constructs the same session the window hosts and checks selection / property edit / undo without opening a window.
+`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). File > Open / Save / Save As / New persist UsingDom XML via Core `DomXmlReader` / `DomXmlWriter`. The committed sample document is `testdata/atf/UsingDom/ogre-adventure-ii.xml`. `--headless-session` checks selection / property edit / undo and an Open → edit → Save As → reopen round-trip without opening a window.
 
 ## Docs
 

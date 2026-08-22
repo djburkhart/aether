@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <Content Include="..\..\testdata\atf\UsingDom\game.xsd" Link="game.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\UsingDom\ogre-adventure-ii.xml" Link="ogre-adventure-ii.xml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

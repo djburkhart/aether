@@ -379,7 +379,7 @@ CI runs the same `dotnet run` after the DomGen `--check` smoke.
 
 # Phase 1 Avalonia application shell
 
-First tools-host slice. A real Avalonia 12 desktop window that hosts the already-ported ATF core against the UsingDom document. Not the full editor: no file documents, no palette, no viewport, no MEF catalog.
+First tools-host slice. A real Avalonia 12 desktop window that hosts the already-ported ATF core against the UsingDom document. Not the full editor: no palette, no viewport, no MEF catalog. Open/Save of UsingDom XML is in this slice.
 
 ## Source
 
@@ -391,7 +391,7 @@ First tools-host slice. A real Avalonia 12 desktop window that hosts the already
 | UI | Avalonia 12.1.0, `StartWithClassicDesktopLifetime` |
 | Docking | [Dock.Avalonia](https://github.com/wieslawsoltes/Dock) 12.1.0.4 + `Dock.Model.Mvvm` + `Dock.Avalonia.Themes.Fluent` |
 | Property grid | [bodong.Avalonia.PropertyGrid](https://github.com/bodong1987/Avalonia.PropertyGrid) 12.0.4.1 |
-| Window title | `Aether` (ATF origin is in Help > About and `NOTICE` only) |
+| Window title | `Aether` or the open filename, plus ` *` when dirty (ATF origin is in Help > About and `NOTICE` only) |
 
 Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`) on Linux. `dotnet run --project src/Aether.Editor -- --headless-session` constructs the same `EditorSession` the window hosts. A display is required to open the desktop window; this change does not claim the GUI was clicked in CI.
 
@@ -409,13 +409,31 @@ Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`) on Linux. `
 - `TransactioningAttributePropertyDescriptor` wraps `SetValue` in `HistoryContext.DoTransaction` so grid edits are undoable
 - Edit > Undo/Redo and a History lister call `HistoryContext` / `CommandHistory` directly
 - `EditorCommandService : CommandServiceBase` stubs `RunContextMenu` (no-op). Menus are Avalonia controls; ATF `ICommandService` is not the host.
-- `--headless-session` smoke: select Bill, edit Size through descriptors, undo
+- `--headless-session` smoke: select Bill, edit Size through descriptors, undo, then Open/Save As/reopen a UsingDom XML file
+
+## File Open / Save
+
+The smaller correct path is Core `DomXmlWriter` / `DomXmlReader` plus Avalonia `StorageProvider`. `GameDocument.WriteXml` / `ReadXml` share that format with the headless UsingDom sample.
+
+`StandardFileCommands` / `IDocumentService` were **not** wired. That host needs MEF `IDocumentClient` (Open/Save/Show/Close), `IDocumentRegistry`, a live `ICommandService` command table, and `IFileDialogService`. This slice has one document and Avalonia file pickers; adding that stack would be a later command-host cut, not persistence.
+
+| Item | Value |
+|---|---|
+| Format | ATF `DomXmlWriter` (UTF-8, tab indent, the same XML the UsingDom sample prints) |
+| Fixture | `testdata/atf/UsingDom/ogre-adventure-ii.xml` (Ogre Adventure II / Bill / Sally / Mr. Oak) |
+| New | `GameDocument.CreateOgreAdventureII()` |
+| Dialogs | Avalonia `IStorageProvider` (not WinForms `FileDialogService`) |
+| Dirty title | filename or `Aether`, plus ` *` when `HistoryContext.Dirty` |
+| Shortcuts | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
+
+Open replaces the session graph, rebinds selection / property editing, and clears undo history. Save writes the current `DomNode` tree.
 
 ## What was excluded / remaining gaps
 
 - Full `ICommandService` host (menus, keyboard-shortcut table, context menus). `RunContextMenu` is the remaining abstract UI hook.
+- `StandardFileCommands` / `IDocumentClient` / `IDocumentRegistry` / `IFileDialogService` — persistence does not need them yet
 - `StandardEditHistoryCommands` / MEF command clients — skipped so undo did not require a command-host implementation
-- File open/save, document registry, palette, search
+- Palette, search, multi-document registry
 - WinForms/WPF, SharpDX, Stride viewport
 - GUI automation (needs a display). CI restore+build plus the headless session flag is the gate.
 
@@ -450,4 +468,4 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, then `dotnet run`s `samples/UsingDom`. Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo plus XML round-trip). Windows CI is not required; no Windows-only API remains in the compiled set.

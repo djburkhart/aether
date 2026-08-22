@@ -11,6 +11,8 @@ namespace Aether.Editor
         {
             if (args.Length > 0 && args[0] == "--headless-session")
                 return HeadlessSession.Run();
+            if (args.Length > 0 && args[0] == "--write-fixture")
+                return HeadlessSession.WriteFixture();
 
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
