@@ -23,7 +23,9 @@ logic-only command / undo / history / document slice of
 `Framework/Atf.Gui`. `src/Aether.Atf.PropertyEditing` is a derivative of
 the logic-only property-editing types from `Framework/Atf.Gui`
 (`Controls/PropertyEditing` and DOM property-descriptor adapters).
-See PORTING.md for the portable subset and cuts.
+`src/Aether.Atf.DomGen` and `src/Aether.Atf.DomGen.Cli` (`aether-domgen`)
+are derivatives of SonyWWS ATF `DevTools/DomGen`. See PORTING.md for
+the portable subset and cuts.
 
 Stride Engine (MIT), used as the preferred runtime foundation:
 https://github.com/stride3d/stride

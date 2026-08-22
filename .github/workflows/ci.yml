@@ -22,3 +22,10 @@ jobs:
 
       - name: Build
         run: dotnet build Aether.sln --no-restore -c Release
+
+      - name: DomGen smoke
+        run: >
+          dotnet run --no-build -c Release --project src/Aether.Atf.DomGen.Cli --
+          testdata/atf/UsingDom/game.xsd
+          testdata/atf/UsingDom/GameSchema.cs
+          Game.UsingDom UsingDom --check
