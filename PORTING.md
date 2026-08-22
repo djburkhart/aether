@@ -81,13 +81,13 @@ Leftover / unused sources next to the project, not compiled by `Atf.Core.vs2010.
 
 Not ported, per Phase 0 constraints:
 
-- `Framework/Atf.Gui`, `Atf.Gui.WinForms`, `Atf.Gui.Wpf`
+- `Atf.Gui.WinForms`, `Atf.Gui.Wpf`
 - SharpDX / Direct2D / DirectWrite / OpenGL
 - DockPanelSuite, WinForms/WPF shells, MEF UI catalogs
-- Command / undo / document-service implementations in `Atf.Gui/Applications` (`ICommandClient`, `ICommandService`, `HistoryContext`, …)
+- The rest of `Framework/Atf.Gui` (listers, property-grid editors, D2D, printing)
 - Stride runtime integration
 
-Command *abstractions* for a later tools host live in Atf.Gui, not Atf.Core. Core already has the data-side pieces those commands sit on: `ITransactionContext`, `Selection<T>`, `IDocument`, `IValidationContext`.
+Command / undo / document-service logic is now in `src/Aether.Atf.Commands` (see below). Core still owns the data-side pieces those commands sit on: `ITransactionContext`, `Selection<T>`, `IDocument`, `IValidationContext`.
 
 ## Remaining blockers / debt
 
@@ -100,9 +100,84 @@ These do **not** prevent `dotnet build`. They are the next cuts or cleanups.
 2. **Windows path semantics:** `PathUtil.GetCanonicalPath` no longer unwraps `subst` drives. Callers that depended on that should use a Windows-only helper later if needed.
 3. **GDI+ matrix conversion:** `Matrix3x2F(System.Drawing.Drawing2D.Matrix)` is compiled out. Re-enable with `SYSTEM_DRAWING_COMMON` + `System.Drawing.Common` if a Windows tools host needs it.
 4. **Telemetry / crash reporting:** no replacement for Recap / `CrashLogger` / `AtfUsageLogger`. Fine for an open-source engine; wire a modern logger if desired.
-5. **MEF vs later DI:** Core MEF works. Atf.Gui still uses MEF catalogs heavily. A future tools host may want `Microsoft.Extensions.DependencyInjection` + `AssemblyLoadContext`; that is a later cut, not required here.
-6. **Command / undo layer:** still in Atf.Gui. Port a logic-only slice of `Atf.Gui/Applications` next if the editor shell needs it before Avalonia UI.
+5. **MEF vs later DI:** Core and Commands MEF work. A future tools host may want `Microsoft.Extensions.DependencyInjection` + `AssemblyLoadContext`; that is a later cut, not required here.
+6. **Command host:** `CommandServiceBase` is still abstract (`RunContextMenu` is the UI hook). WinForms/WPF `CommandService` subclasses were not ported. An Avalonia host should subclass the base.
 7. **No unit tests yet.** ATF’s tests lived in a separate Framework project and were not part of this build signal.
+
+---
+
+# ATF Atf.Gui Applications → net10.0 command slice
+
+Second Phase 0 build signal. Logic-only command / undo / history / document-service types from `Framework/Atf.Gui` retargeted as `src/Aether.Atf.Commands`. Depends on `Aether.Atf.Core`. No GUI assemblies.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream area | `Framework/Atf.Gui/Applications` plus `Atf.Gui/Dom` history adapters and `Atf.Gui/Input` |
+| Destination | `src/Aether.Atf.Commands` (`Aether.Atf.Commands.csproj`) |
+| Destination TFM | `net10.0` |
+| Assembly name | `Aether.Atf.Commands` |
+| Namespaces | `Sce.Atf`, `Sce.Atf.Applications`, `Sce.Atf.Input`, `Sce.Atf.Dom`, `Sce.Atf.Controls.PropertyEditing` (kept) |
+
+Verified by compiling `Aether.sln` with the .NET 10 SDK (`10.0.400`).
+
+## Cut line (verified)
+
+The hypothesis held: a logic-only project compiles if WinForms menu/toolbar/status hosts are left behind.
+
+**The command architecture is not WinForms.** `ICommandService` / `CommandServiceBase` / `CommandInfo` use ATF’s own `Sce.Atf.Input.Keys` (copied from WinForms `Keys`, already abstracted). `RunContextMenu(IEnumerable, Point)` is the only UI hook on the service; it is `abstract` on `CommandServiceBase`. Concrete `CommandService` types live in `Atf.Gui.WinForms` and `Atf.Gui.Wpf` and were not copied.
+
+`Point` and `Color` come from inbox `System.Drawing.Primitives`. `System.Drawing.Common` is not referenced.
+
+## What compiled
+
+87 C# files. Includes:
+
+- **Command service:** `ICommandClient`, `ICommandService`, `CommandServiceBase`, `CommandInfo`, `CommandId`, `MenuInfo`, `CommandState`, `CommandVisibility`, `StandardCommand` / `StandardMenu` / `StandardCommandGroup`
+- **Undo stack:** `Command`, `CommandHistory`, `CommandCount`, `CompositeCommand`, list/property/selection commands
+- **Standard clients:** `StandardEditHistoryCommands`, `StandardFileCommands` (this *is* `IDocumentService`), `StandardSelectionCommands`, `StandardLockCommands`, `StandardShowCommands`, `RecentDocumentCommands`, `HelpAboutCommand` (abstract `ShowHelpAbout`)
+- **Registries:** `DocumentRegistry`, `ContextRegistry`
+- **Context interfaces:** `ISelectionContext`, `IHistoryContext`, `IInstancingContext`, `INamingContext`, `IVisibilityContext`, `IViewingContext`, insertion/property/help/coloring
+- **Dialog contracts (no hosts):** `IFileDialogService`, `IMessageBoxService`, `ISettingsService`
+- **Watchers:** `FileWatcherService`, `DirectoryWatcherService` (`ISynchronizeInvoke` is optional)
+- **DOM adapters:** `HistoryContext`, `GlobalHistoryContext`, `MultipleHistoryContext`, `SelectionContext`, `EditingContext`
+- **Input:** `Keys`, `KeyEventArgs`, `KeysUtil`, plus mouse/key event arg types used by the command layer
+- **Support:** `BoundPropertyDescriptor`, `FileFilterBuilder`, `Resources` (name table only), `ImageResourceAttribute`, `CursorResourceAttribute`
+
+`StandardFileCommands` is the document service implementation. There is no separate `DocumentService` class in Atf.Gui; WinForms only supplied file-dialog and command-host subclasses.
+
+## What was adapted
+
+| File | Change |
+|---|---|
+| `Resources.cs` | Static constructor assigns image/cursor *names* from attributes. It no longer reflects for WinForms/WPF `ResourceUtil` (GDI+ load). |
+| `Applications/HelpAboutCommand.cs` | Removed unused `using Sce.Atf.Controls` (About dialog is WinForms). |
+| `Applications/IStatusImage.cs` | `Image` is `object` instead of `System.Drawing.Image`. Status-bar hosts can store any bitmap-like object. |
+
+## What was excluded
+
+UI hosts and adjacent GUI:
+
+- `Atf.Gui.WinForms` / `Atf.Gui.Wpf` entirely (`CommandService`, `FileDialogService`, `StatusService`, About dialog)
+- `StatusService`, `PluginManagerForm` / `PluginManagerService`
+- `AssetLister`, `GridControlAdapter`, lister `ItemInfo`, search/replace toolstrips
+- `TextPrintDocument`, `CanvasPrintDocument`, `IPrintableDocument`
+- `WindowLayoutService` / `IDockStateProvider` / `StandardDockAreas`
+- `ISearchableContextUI`, `IPaletteService`, `IThumbnailResolver`
+- `SettingsServiceBase` (`BinaryFormatter` + `PresentUserSettings` UI). `ISettingsService` remains; `CommandServiceBase` imports it optionally.
+- `StandardViewCommands` — constructor requires `ScriptingService` (IronPython / `Microsoft.Scripting`)
+- `ScriptingService`, NetworkTarget*, VersionControl UI, Sony WebServices
+- Property-grid editors (`ColorEditor`, …), D2D, DirectWrite, `User32`/`Gdi32`
+
+## Remaining blockers / debt (commands)
+
+1. **No concrete `ICommandService` host.** A tools host must subclass `CommandServiceBase` and implement `RunContextMenu`.
+2. **No concrete `IFileDialogService` / `IMessageBoxService`.** `StandardFileCommands` needs them at runtime (MEF imports). Provide Avalonia (or headless) implementations later.
+3. **`IStatusImage.Image` type change** — WinForms status panels that assigned `System.Drawing.Image` need a one-line adapter.
+4. **`SettingsServiceBase` not ported.** Keyboard-shortcut persistence in `CommandServiceBase.Initialize` is a no-op until an `ISettingsService` is supplied.
+5. **`StandardViewCommands` / scripting** still behind the IronPython dependency.
+6. **No unit tests.**
 
 ## License / attribution
 
@@ -117,4 +192,4 @@ These do **not** prevent `dotnet build`. They are the next cuts or cleanups.
 dotnet build Aether.sln -c Release
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest`. Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln` (both `Aether.Atf.Core` and `Aether.Atf.Commands`). Windows CI is not required; no Windows-only API remains in the compiled set.
