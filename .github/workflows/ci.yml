@@ -29,3 +29,6 @@ jobs:
           testdata/atf/UsingDom/game.xsd
           testdata/atf/UsingDom/GameSchema.cs
           Game.UsingDom UsingDom --check
+
+      - name: UsingDom sample
+        run: dotnet run --no-build -c Release --project samples/UsingDom

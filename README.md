@@ -10,7 +10,7 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 0. ATF `Atf.Core`, command / undo, property-editing logic, and DomGen schema codegen are on `net10.0` as `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen`, and the `aether-domgen` CLI. No GUI. No DX11. See [PORTING.md](PORTING.md).
+Phase 0. ATF `Atf.Core`, command / undo, property-editing logic, and DomGen schema codegen are on `net10.0` as `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen`, and the `aether-domgen` CLI. The headless UsingDom sample (`samples/UsingDom`) loads the ATF schema, builds the sample document, and edits it through property descriptors. No GUI. No DX11. See [PORTING.md](PORTING.md).
 
 Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred editor UI is Avalonia. Stride's official Avalonia Game Studio is not ready enough to be our tools host; we build the authoring layer.
 
@@ -24,6 +24,7 @@ Requires the .NET 10 SDK.
 
 ```bash
 dotnet build Aether.sln -c Release
+dotnet run -c Release --project samples/UsingDom
 ```
 
 ## Docs
