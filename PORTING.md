@@ -211,7 +211,7 @@ A **new project** is cleaner than folding this into Core or Commands.
 
 The hypothesis held. ATF’s property framework is TypeDescriptor / custom descriptor / editing-context / converter logic. WinForms `PropertyGrid` / `PropertyView` / `IPropertyEditor` and WPF value editors are the UI skin.
 
-`IPropertyEditor` lives in `Atf.Gui.WinForms` (`GetEditingControl` returns a WinForms `Control`) and was not copied. `PropertyEditorControlContext` and `TypeDescriptorContext` are also WinForms. Schema annotations still store an `object editor` on `Sce.Atf.Dom.PropertyDescriptor`; a later Avalonia host can supply its own editor objects.
+`IPropertyEditor` lives in `Atf.Gui.WinForms` (`GetEditingControl` returns `System.Windows.Forms.Control`) and was not copied. `PropertyEditorControlContext` and `TypeDescriptorContext` are also WinForms. Schema annotations still store an `object editor` on `Sce.Atf.Dom.PropertyDescriptor`; a later Avalonia host can supply its own editor objects.
 
 `Color` comes from inbox `System.Drawing.Primitives` (`IntColorConverter` uses `Color.FromArgb` / `ToArgb`). `System.Drawing.Common` is not referenced.
 
