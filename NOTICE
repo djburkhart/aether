@@ -1,0 +1,21 @@
+Aether Engine
+https://github.com/djburkhart/aether
+
+Aether modernizes Sony World Wide Studios authoring tools into a
+tools-first, open-source C# game engine.
+
+Upstream sources (Apache License 2.0):
+- ATF: https://github.com/SonyWWS/ATF  (fork: https://github.com/djburkhart/ATF)
+- LevelEditor: https://github.com/SonyWWS/LevelEditor  (fork: https://github.com/djburkhart/LevelEditor)
+- SLED: https://github.com/SonyWWS/SLED  (fork: https://github.com/djburkhart/SLED)
+
+Original work:
+Copyright 2014-2017 Sony Computer Entertainment America LLC
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Aether Engine modifications are Copyright Resolvora LLC and contributors.
+Modified files are marked. Sony and PlayStation names are used only to
+describe origin, per Apache License section 6.
+
+Stride Engine (MIT), used as the preferred runtime foundation:
+https://github.com/stride3d/stride
