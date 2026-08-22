@@ -9,6 +9,9 @@
     <DataTemplate DataType="dockables:ObjectsDocument">
       <views:ObjectsView DataContext="{Binding Session}" />
     </DataTemplate>
+    <DataTemplate DataType="dockables:CircuitGraphDocument">
+      <views:CircuitView DataContext="{Binding Session}" />
+    </DataTemplate>
     <DataTemplate DataType="dockables:PropertiesTool">
       <views:PropertiesView DataContext="{Binding Session}" />
     </DataTemplate>
