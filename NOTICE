@@ -24,10 +24,18 @@ logic-only command / undo / history / document slice of
 the logic-only property-editing types from `Framework/Atf.Gui`
 (`Controls/PropertyEditing` and DOM property-descriptor adapters).
 `src/Aether.Atf.DomGen` and `src/Aether.Atf.DomGen.Cli` (`aether-domgen`)
-are derivatives of SonyWWS ATF `DevTools/DomGen`. `samples/UsingDom` is a
-headless retarget of ATF `Samples/UsingDom` (schema + document graph)
-plus property-editing descriptors from `Aether.Atf.PropertyEditing`.
+are derivatives of SonyWWS ATF `DevTools/DomGen`. `samples/UsingDom` and
+`samples/UsingDom.Document` retarget ATF `Samples/UsingDom` (schema +
+document graph) plus property-editing descriptors from
+`Aether.Atf.PropertyEditing`. `src/Aether.Editor` is new Aether hosting
+code; it is not a Sony product. Sony and PlayStation names appear only
+in About / NOTICE to describe ATF origin.
 See PORTING.md for the portable subset and cuts.
+
+Third-party UI (MIT), referenced from `src/Aether.Editor`:
+- Avalonia: https://github.com/AvaloniaUI/Avalonia
+- Dock (Dock.Avalonia): https://github.com/wieslawsoltes/Dock
+- Avalonia.PropertyGrid: https://github.com/bodong1987/Avalonia.PropertyGrid
 
 Stride Engine (MIT), used as the preferred runtime foundation:
 https://github.com/stride3d/stride

@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        x:Class="Aether.Editor.MainWindow"
+        Title="Aether"
+        Width="1100"
+        Height="720"
+        MinWidth="720"
+        MinHeight="480">
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="E_xit" Click="OnExit" />
+      </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem Header="{Binding UndoText}"
+                  Click="OnUndo"
+                  IsEnabled="{Binding CanUndo}" />
+        <MenuItem Header="{Binding RedoText}"
+                  Click="OnRedo"
+                  IsEnabled="{Binding CanRedo}" />
+      </MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem Header="_About Aether" Click="OnAbout" />
+      </MenuItem>
+    </Menu>
+    <TextBlock DockPanel.Dock="Bottom"
+               Margin="8,4"
+               Opacity="0.7"
+               Text="{Binding StatusText}" />
+    <dock:DockControl x:Name="Dock" />
+  </DockPanel>
+</Window>

@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pg="using:Avalonia.PropertyGrid.Controls"
+             x:Class="Aether.Editor.Views.PropertiesView">
+  <DockPanel Margin="8">
+    <TextBlock DockPanel.Dock="Top"
+               Text="{Binding StatusText}"
+               FontWeight="SemiBold"
+               Margin="0,0,0,8" />
+    <pg:PropertyGrid DataContext="{Binding PropertyTarget}" />
+  </DockPanel>
+</UserControl>
