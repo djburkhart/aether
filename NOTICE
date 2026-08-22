@@ -28,7 +28,12 @@ are derivatives of SonyWWS ATF `DevTools/DomGen`. `samples/UsingDom` and
 `samples/UsingDom.Document` retarget ATF `Samples/UsingDom` (schema +
 document graph) plus property-editing descriptors from
 `Aether.Atf.PropertyEditing`. `testdata/atf/UsingDom/ogre-adventure-ii.xml`
-is the DomXmlWriter form of that sample document. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
+is the DomXmlWriter form of that sample document. `src/Aether.Atf.Circuit`
+is a derivative of the portable ATF circuit graph interfaces and DOM
+adapters (`Framework/Atf.Gui/Controls/Adaptable/Graphs`). `src/Aether.Circuit`
+retargets ATF `Samples/CircuitEditor` adapters, schema loader, and runtime
+module types. `testdata/atf/CircuitEditor` is the ATF Circuit.xsd,
+aether-domgen Schema.cs, and Example.circuit fixture. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
 code; they are not Sony products. Sony and PlayStation names appear only
 in About / NOTICE to describe ATF origin. Host plugins use
 Microsoft.Extensions.DependencyInjection. ATF Core / Commands /

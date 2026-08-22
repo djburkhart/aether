@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 
+using Aether.Circuit;
 using Aether.Plugins;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -38,7 +39,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProvePlugins(session);
+            code = ProvePlugins(session);
+            if (code != 0)
+                return code;
+
+            return ProveCircuit(session);
         }
 
         public static int WriteFixture()
@@ -238,6 +243,142 @@ namespace Aether.Editor
 
             Console.WriteLine("contribution: {0} — {1}", hello.Title, hello.Description);
             Console.WriteLine("headless plugins ok");
+            return 0;
+        }
+
+        private static int ProveCircuit(EditorSession session)
+        {
+            string? fixture = CircuitDocuments.FindSampleDocumentPath();
+            if (fixture == null)
+            {
+                Console.Error.WriteLine("Error: could not find testdata/atf/CircuitEditor/Example.circuit");
+                return 30;
+            }
+
+            Console.WriteLine("circuit fixture: {0}", fixture);
+            session.Open(fixture);
+            if (session.ActiveKind != EditorDocumentKind.Circuit)
+            {
+                Console.Error.WriteLine("Error: Open of Example.circuit did not activate the circuit document.");
+                return 31;
+            }
+
+            int modules = session.Circuit.Nodes.Count;
+            int wires = session.Circuit.Wires.Count;
+            Console.WriteLine("circuit modules: {0}", modules);
+            Console.WriteLine("circuit wires: {0}", wires);
+            if (modules != CircuitDocuments.ExampleModuleCount || wires != CircuitDocuments.ExampleConnectionCount)
+            {
+                Console.Error.WriteLine(
+                    "Error: Example.circuit should have {0} modules and {1} wires, got {2}/{3}.",
+                    CircuitDocuments.ExampleModuleCount,
+                    CircuitDocuments.ExampleConnectionCount,
+                    modules,
+                    wires);
+                return 32;
+            }
+
+            CircuitNodeItem? and1 = session.Circuit.Find("And_1");
+            if (and1 == null)
+            {
+                Console.Error.WriteLine("Error: Example.circuit is missing And_1.");
+                return 33;
+            }
+
+            session.Circuit.SelectedNode = and1;
+            if (session.PropertyTarget == null)
+            {
+                Console.Error.WriteLine("Error: selecting And_1 did not produce an ICustomTypeDescriptor target.");
+                return 34;
+            }
+
+            PropertyDescriptor? id = FindDescriptor(session, "ID");
+            if (id == null)
+            {
+                Console.Error.WriteLine("Error: selected And_1 is missing ID descriptor.");
+                return 35;
+            }
+
+            object? idValue = id.GetValue(session.PropertyTarget);
+            Console.WriteLine("And_1 ID: {0}", idValue);
+            if (!Equals(idValue, "And_1"))
+            {
+                Console.Error.WriteLine("Error: And_1 ID should be And_1.");
+                return 36;
+            }
+
+            PropertyDescriptor? name = FindDescriptor(session, "Name");
+            if (name == null)
+            {
+                Console.Error.WriteLine("Error: selected And_1 is missing Name descriptor.");
+                return 37;
+            }
+
+            object? before = name.GetValue(session.PropertyTarget);
+            PropertyUtils.SetProperty(and1.Module.DomNode, name, "And gate");
+            object? after = name.GetValue(session.PropertyTarget);
+            Console.WriteLine("And_1 Name after edit: {0}", after);
+            if (!Equals(after, "And gate"))
+            {
+                Console.Error.WriteLine("Error: circuit property edit did not change the module label.");
+                return 38;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: circuit HistoryContext did not record the edit.");
+                return 39;
+            }
+
+            session.Undo();
+            object? undone = name.GetValue(session.PropertyTarget ?? (object)and1.Module.DomNode);
+            Console.WriteLine("And_1 Name after undo: {0}", undone);
+            if (!Equals(undone, before))
+            {
+                Console.Error.WriteLine("Error: circuit undo did not restore Name.");
+                return 40;
+            }
+
+            session.AddCircuitAnd();
+            int afterAddModules = session.Circuit.Nodes.Count;
+            int afterAddWires = session.Circuit.Wires.Count;
+            Console.WriteLine("circuit after add: {0} modules, {1} wires", afterAddModules, afterAddWires);
+            if (afterAddModules != CircuitDocuments.ExampleModuleCount + 1 ||
+                afterAddWires != CircuitDocuments.ExampleConnectionCount + 1)
+            {
+                Console.Error.WriteLine("Error: Add And + wire should add one module and one wire.");
+                return 41;
+            }
+
+            string temp = Path.Combine(Path.GetTempPath(), "aether-circuit-roundtrip-" + Guid.NewGuid().ToString("N") + ".circuit");
+            try
+            {
+                session.SaveAs(temp);
+                session.Circuit.LoadExample();
+                session.Open(temp);
+                if (session.Circuit.Nodes.Count != afterAddModules || session.Circuit.Wires.Count != afterAddWires)
+                {
+                    Console.Error.WriteLine(
+                        "Error: reopened circuit should have {0} modules and {1} wires, got {2}/{3}.",
+                        afterAddModules,
+                        afterAddWires,
+                        session.Circuit.Nodes.Count,
+                        session.Circuit.Wires.Count);
+                    return 42;
+                }
+
+                if (session.Circuit.Find("And_1") == null)
+                {
+                    Console.Error.WriteLine("Error: reopened circuit is missing And_1.");
+                    return 43;
+                }
+            }
+            finally
+            {
+                try { File.Delete(temp); } catch (IOException) { }
+            }
+
+            Console.WriteLine("headless circuit ok");
             return 0;
         }
 

@@ -502,4 +502,56 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smoke, `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph). Windows CI is not required; no Windows-only API remains in the compiled set.
+
+---
+
+# CircuitEditor first slice (schema + adapters + Avalonia graph)
+
+First port of SonyWWS ATF CircuitEditor into Aether as a node-graph tool. Data + a usable Avalonia view. Not a visual-scripting product and not a WinForms port.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream sample | `Samples/CircuitEditor` (single project; there is no CircuitEditorCore) |
+| Upstream graph types | `Framework/Atf.Gui/Controls/Adaptable/Graphs` (+ `Circuit/`) |
+| Schema | `Samples/CircuitEditor/schemas/Circuit.xsd` (`http://sony.com/gametech/circuits/1_0`) |
+| Sample document | `Samples/CircuitEditor/data/Example.circuit` (9 modules, 8 wires) |
+| Destination graph | `src/Aether.Atf.Circuit` |
+| Destination sample | `src/Aether.Circuit` |
+| Fixtures | `testdata/atf/CircuitEditor/` (`Circuit.xsd`, generated `Schema.cs`, `Example.circuit`) |
+| Destination TFM | `net10.0` |
+
+The hypothesis held: CircuitEditor’s value is the schema + DomNode adapters + graph model. The WinForms `CircuitControl` / GDI / D2D renderers are disposable for this slice.
+
+## Cut line
+
+**Ported (data):** `IGraph` / `IGraphNode` / `IGraphEdge` / `IEdgeRoute`, `ICircuitPin` / `ICircuitElement` / `ICircuitElementType`, `Element`, `Wire`, `Pin`, `Circuit`, `ElementType`, `CircuitElementInfo`, `PinTarget`. Sample `Module` / `Connection` / `Circuit` / `Pin`. SchemaLoader registers those adapters plus `HistoryContext`, `SelectionContext`, and `ObservableCustomTypeDescriptorNodeAdapter`. Runtime module types (`buttonType`, `andType`, `lightType`, …) are still created in `ModuleCatalog` — they are **not** in the XSD; ATF defined them in `ModulePlugin`.
+
+**Not ported:** `CircuitControl`, `CircuitRenderer`, `D2dCircuitRenderer`, `CircuitMagnifier`, WinForms palette / `IPaletteClient`, Group / GroupPin / templates / prototypes / layers / expressions, version migrator (`CircuitEditor1to2`), LevelEditor.
+
+`ICircuitElementType.Image` is `object` (same pattern as `IStatusImage`). `Point` / `Size` / `Rectangle` come from inbox `System.Drawing.Primitives`.
+
+## Node-graph view
+
+Looked at maintained Avalonia node-graph controls first:
+
+| Package | Why it was not used for this slice |
+|---|---|
+| NodifyAvalonia 6.6.0 | Targets Avalonia 11.1, not 12. |
+| Nodify.Avalonia 2.0 / NodifyM.Avalonia | Avalonia 12, but they own a parallel node/connector VM. ATF connections are pin-index IDREFs on DomNodes, not Nodify connectors. Wrapping every Module/Wire would be a second graph model. |
+
+This slice draws boxes + lines with a custom `CircuitGraphControl` (`Control.Render`). Click a module to select it; the existing PropertyGrid binds the module’s `ICustomTypeDescriptor`. Adding one And gate and one wire is enough beyond loading Example.circuit.
+
+File Open detects `.circuit` (or a `circuit` XML root) and routes to the circuit session; UsingDom `.xml` stays on the game session. Both documents stay loaded. Undo/Save follow the last-activated document.
+
+## Headless proof
+
+`--headless-session` loads Example.circuit, asserts 9 modules / 8 wires, selects And_1, edits Name through ATF descriptors, undoes, adds one And + wire, Save As / reopen.
+
+```bash
+dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
+  testdata/atf/CircuitEditor/Circuit.xsd testdata/atf/CircuitEditor/Schema.cs \
+  http://sony.com/gametech/circuits/1_0 CircuitEditorSample --check
+```

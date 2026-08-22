@@ -30,6 +30,13 @@ jobs:
           testdata/atf/UsingDom/GameSchema.cs
           Game.UsingDom UsingDom --check
 
+      - name: CircuitEditor DomGen smoke
+        run: >
+          dotnet run --no-build -c Release --project src/Aether.Atf.DomGen.Cli --
+          testdata/atf/CircuitEditor/Circuit.xsd
+          testdata/atf/CircuitEditor/Schema.cs
+          http://sony.com/gametech/circuits/1_0 CircuitEditorSample --check
+
       - name: UsingDom sample
         run: dotnet run --no-build -c Release --project samples/UsingDom
 

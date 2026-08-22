@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Aether.Circuit</RootNamespace>
+    <AssemblyName>Aether.Circuit</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <Description>CircuitEditor sample adapters, schema loader, and DomXml document helpers for Aether.</Description>
+    <Product>Aether Engine</Product>
+    <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\testdata\atf\CircuitEditor\Schema.cs" Link="Schema.cs" />
+    <Content Include="..\..\testdata\atf\CircuitEditor\Circuit.xsd" Link="Circuit.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\CircuitEditor\Example.circuit" Link="Example.circuit" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Commands\Aether.Atf.Commands.csproj" />
+    <ProjectReference Include="..\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Circuit\Aether.Atf.Circuit.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -23,6 +23,18 @@ namespace Aether.Editor
             MimeTypes = new[] { "application/xml", "text/xml" }
         };
 
+        private static readonly FilePickerFileType CircuitFiles = new("CircuitEditor")
+        {
+            Patterns = new[] { "*.circuit" },
+            MimeTypes = new[] { "application/xml", "text/xml" }
+        };
+
+        private static readonly FilePickerFileType Documents = new("Documents")
+        {
+            Patterns = new[] { "*.circuit", "*.xml" },
+            MimeTypes = new[] { "application/xml", "text/xml" }
+        };
+
         public MainWindow()
         {
             InitializeComponent();
@@ -123,9 +135,9 @@ namespace Aether.Editor
             IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(
                 new FilePickerOpenOptions
                 {
-                    Title = "Open UsingDom document",
+                    Title = "Open document",
                     AllowMultiple = false,
-                    FileTypeFilter = new[] { UsingDomXml }
+                    FileTypeFilter = new[] { Documents, CircuitFiles, UsingDomXml }
                 });
             IStorageFile? file = files.FirstOrDefault();
             if (file == null)
@@ -174,17 +186,20 @@ namespace Aether.Editor
             if (DataContext is not EditorSession session)
                 return;
 
+            bool circuit = session.ActiveKind == EditorDocumentKind.Circuit;
             string suggested = session.FilePath != null
                 ? Path.GetFileName(session.FilePath)
-                : "game.xml";
+                : (circuit ? "circuit.circuit" : "game.xml");
 
             IStorageFile? file = await StorageProvider.SaveFilePickerAsync(
                 new FilePickerSaveOptions
                 {
-                    Title = "Save UsingDom document",
+                    Title = circuit ? "Save circuit document" : "Save UsingDom document",
                     SuggestedFileName = suggested,
-                    DefaultExtension = "xml",
-                    FileTypeChoices = new[] { UsingDomXml },
+                    DefaultExtension = circuit ? "circuit" : "xml",
+                    FileTypeChoices = circuit
+                        ? new[] { CircuitFiles, Documents }
+                        : new[] { UsingDomXml, Documents },
                     ShowOverwritePrompt = true
                 });
             if (file == null)
@@ -232,10 +247,11 @@ namespace Aether.Editor
                 "The document and property system come from SonyWWS ATF (Apache 2.0), " +
                 "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
                 "Sony and PlayStation names are used only to describe that origin.\n\n" +
-                "Open/Save uses Core DomXmlReader / DomXmlWriter. " +
+                "Open/Save uses Core DomXmlReader / DomXmlWriter for UsingDom XML and CircuitEditor .circuit files. " +
                 "Host plugins use Microsoft.Extensions.DependencyInjection + AssemblyLoadContext; " +
                 "ATF types still use MEF internally.\n" +
-                "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid.";
+                "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +
+                "Circuit graph: custom Avalonia canvas (ATF pin-index wires).";
 
             if (session == null || session.LoadedPlugins.Count == 0)
                 return text + "\n\nNo host plugins loaded.";

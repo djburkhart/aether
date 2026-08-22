@@ -20,6 +20,21 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
+    /// CircuitEditor node-graph document.</summary>
+    public sealed class CircuitGraphDocument : Document
+    {
+        public CircuitGraphDocument(EditorSession session)
+        {
+            Session = session;
+            Id = "Circuit";
+            Title = "Circuit";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
     /// Properties tool pane.</summary>
     public sealed class PropertiesTool : Tool
     {

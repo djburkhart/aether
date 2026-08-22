@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 
+using Aether.Circuit;
 using Aether.Plugins;
 
 using Sce.Atf.Adaptation;
@@ -17,9 +18,10 @@ using UsingDom;
 namespace Aether.Editor
 {
     /// <summary>
-    /// Session for the Phase 1 shell: UsingDom document, ATF selection/property
-    /// contexts, HistoryContext undo, and DomXml Open/Save. Menus call this
-    /// directly; StandardFileCommands / IDocumentService are not the host.</summary>
+    /// Session for the Phase 1 shell: UsingDom document, CircuitEditor graph,
+    /// ATF selection/property contexts, HistoryContext undo, and DomXml Open/Save.
+    /// Menus call this directly; StandardFileCommands / IDocumentService are not
+    /// the host.</summary>
     public sealed class EditorSession : INotifyPropertyChanged
     {
         public EditorSession()
@@ -34,6 +36,8 @@ namespace Aether.Editor
             HistoryItems = new ObservableCollection<string>();
             PropertyEditing = new SelectionPropertyEditingContext();
             PluginHost = PluginHost.Load(PluginLocator.DefaultDirectory);
+            Circuit = new CircuitSession();
+            Circuit.PropertyChanged += OnCircuitPropertyChanged;
             New();
         }
 
@@ -55,6 +59,13 @@ namespace Aether.Editor
 
         public PluginHost PluginHost { get; }
 
+        public CircuitSession Circuit { get; }
+
+        public EditorDocumentKind ActiveKind
+        {
+            get { return m_activeKind; }
+        }
+
         public IReadOnlyList<LoadedPlugin> LoadedPlugins
         {
             get { return PluginHost.Plugins; }
@@ -67,7 +78,7 @@ namespace Aether.Editor
 
         public string? FilePath
         {
-            get { return m_filePath; }
+            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.FilePath : m_filePath; }
             private set
             {
                 if (m_filePath == value)
@@ -82,18 +93,20 @@ namespace Aether.Editor
 
         public bool CanSave
         {
-            get { return m_filePath != null; }
+            get { return FilePath != null; }
         }
 
         public bool IsDirty
         {
-            get { return History.Dirty; }
+            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.IsDirty : History.Dirty; }
         }
 
         public string WindowTitle
         {
             get
             {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.WindowTitle;
                 string name = m_filePath != null ? Path.GetFileName(m_filePath) : "Aether";
                 return IsDirty ? name + " *" : name;
             }
@@ -110,13 +123,22 @@ namespace Aether.Editor
                 OnPropertyChanged();
 
                 if (value != null)
+                {
+                    m_activeKind = EditorDocumentKind.Game;
+                    Circuit.SelectedNode = null;
                     Selection.Selection.SetRange(new object[] { value.Node });
+                    PropertyEditing.SelectionContext = Selection;
+                    PropertyTarget = value.Node.As<ICustomTypeDescriptor>();
+                    OnPropertyChanged(nameof(ActiveKind));
+                    NotifyHistoryCommands();
+                    NotifyFileState();
+                }
                 else
+                {
                     Selection.Selection.Clear();
+                    PropertyTarget = null;
+                }
 
-                PropertyTarget = value != null
-                    ? value.Node.As<ICustomTypeDescriptor>()
-                    : null;
                 OnPropertyChanged(nameof(PropertyTarget));
                 OnPropertyChanged(nameof(StatusText));
             }
@@ -130,6 +152,8 @@ namespace Aether.Editor
         {
             get
             {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.StatusText;
                 string doc = m_filePath != null ? Path.GetFileName(m_filePath) : "untitled";
                 string sel = m_selectedObject == null
                     ? "select an object"
@@ -140,18 +164,20 @@ namespace Aether.Editor
 
         public bool CanUndo
         {
-            get { return History.CanUndo; }
+            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.CanUndo : History.CanUndo; }
         }
 
         public bool CanRedo
         {
-            get { return History.CanRedo; }
+            get { return m_activeKind == EditorDocumentKind.Circuit ? Circuit.CanRedo : History.CanRedo; }
         }
 
         public string UndoText
         {
             get
             {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.UndoText;
                 return History.CanUndo
                     ? "Undo " + History.UndoDescription
                     : "Undo";
@@ -162,6 +188,8 @@ namespace Aether.Editor
         {
             get
             {
+                if (m_activeKind == EditorDocumentKind.Circuit)
+                    return Circuit.RedoText;
                 return History.CanRedo
                     ? "Redo " + History.RedoDescription
                     : "Redo";
@@ -177,11 +205,26 @@ namespace Aether.Editor
         {
             if (string.IsNullOrEmpty(path))
                 throw new ArgumentException("Path is required.", nameof(path));
+            if (CircuitDocuments.IsCircuitDocument(path))
+            {
+                Circuit.Open(path);
+                ActivateCircuit();
+                return;
+            }
+
             BindDocument(GameDocument.ReadXml(path, Loader), Path.GetFullPath(path));
+            m_activeKind = EditorDocumentKind.Game;
+            OnPropertyChanged(nameof(ActiveKind));
         }
 
         public void Save()
         {
+            if (m_activeKind == EditorDocumentKind.Circuit)
+            {
+                Circuit.Save();
+                NotifyFileState();
+                return;
+            }
             if (m_filePath == null)
                 throw new InvalidOperationException("No file path; use Save As.");
             SaveAs(m_filePath);
@@ -191,6 +234,12 @@ namespace Aether.Editor
         {
             if (string.IsNullOrEmpty(path))
                 throw new ArgumentException("Path is required.", nameof(path));
+            if (m_activeKind == EditorDocumentKind.Circuit)
+            {
+                Circuit.SaveAs(path);
+                NotifyFileState();
+                return;
+            }
             if (Loader.TypeCollection == null)
                 throw new InvalidOperationException("Schema type collection is not loaded.");
 
@@ -202,6 +251,13 @@ namespace Aether.Editor
 
         public void Undo()
         {
+            if (m_activeKind == EditorDocumentKind.Circuit)
+            {
+                Circuit.Undo();
+                RefreshCircuitPropertyTarget();
+                NotifyHistoryCommands();
+                return;
+            }
             if (History.CanUndo)
                 History.Undo();
             NotifyHistoryCommands();
@@ -210,10 +266,23 @@ namespace Aether.Editor
 
         public void Redo()
         {
+            if (m_activeKind == EditorDocumentKind.Circuit)
+            {
+                Circuit.Redo();
+                RefreshCircuitPropertyTarget();
+                NotifyHistoryCommands();
+                return;
+            }
             if (History.CanRedo)
                 History.Redo();
             NotifyHistoryCommands();
             RefreshPropertyTarget();
+        }
+
+        public void AddCircuitAnd()
+        {
+            Circuit.AddAndWithWire();
+            ActivateCircuit();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -327,6 +396,63 @@ namespace Aether.Editor
             OnPropertyChanged(nameof(StatusText));
         }
 
+        private void ActivateCircuit()
+        {
+            m_activeKind = EditorDocumentKind.Circuit;
+            if (m_selectedObject != null)
+            {
+                m_selectedObject = null;
+                OnPropertyChanged(nameof(SelectedObject));
+            }
+
+            PropertyEditing.SelectionContext = Circuit.Selection;
+            RefreshCircuitPropertyTarget();
+            OnPropertyChanged(nameof(ActiveKind));
+            NotifyHistoryCommands();
+            NotifyFileState();
+        }
+
+        private void RefreshCircuitPropertyTarget()
+        {
+            PropertyTarget = Circuit.SelectedNode != null
+                ? Circuit.SelectedNode.Module.DomNode.As<ICustomTypeDescriptor>()
+                : null;
+            OnPropertyChanged(nameof(PropertyTarget));
+            OnPropertyChanged(nameof(StatusText));
+        }
+
+        private void OnCircuitPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(CircuitSession.SelectedNode))
+            {
+                if (Circuit.SelectedNode != null)
+                    ActivateCircuit();
+                return;
+            }
+
+            if (m_activeKind != EditorDocumentKind.Circuit)
+                return;
+
+            if (e.PropertyName == nameof(CircuitSession.CanUndo) ||
+                e.PropertyName == nameof(CircuitSession.CanRedo) ||
+                e.PropertyName == nameof(CircuitSession.UndoText) ||
+                e.PropertyName == nameof(CircuitSession.RedoText))
+            {
+                NotifyHistoryCommands();
+            }
+
+            if (e.PropertyName == nameof(CircuitSession.IsDirty) ||
+                e.PropertyName == nameof(CircuitSession.WindowTitle) ||
+                e.PropertyName == nameof(CircuitSession.StatusText) ||
+                e.PropertyName == nameof(CircuitSession.CanSave) ||
+                e.PropertyName == nameof(CircuitSession.FilePath))
+            {
+                NotifyFileState();
+                OnPropertyChanged(nameof(FilePath));
+                OnPropertyChanged(nameof(CanSave));
+            }
+        }
+
         private void NotifyHistoryCommands()
         {
             OnPropertyChanged(nameof(CanUndo));
@@ -350,6 +476,13 @@ namespace Aether.Editor
         private GameObjectItem? m_selectedObject;
         private string? m_filePath;
         private bool m_historyHooked;
+        private EditorDocumentKind m_activeKind = EditorDocumentKind.Game;
+    }
+
+    public enum EditorDocumentKind
+    {
+        Game,
+        Circuit
     }
 
     public sealed class GameObjectItem
