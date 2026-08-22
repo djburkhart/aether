@@ -17,5 +17,8 @@ Aether Engine modifications are Copyright Resolvora LLC and contributors.
 Modified files are marked. Sony and PlayStation names are used only to
 describe origin, per Apache License section 6.
 
+`src/Aether.Atf.Core` is a derivative of SonyWWS ATF `Framework/Atf.Core`
+(namespace `Sce.Atf`). See PORTING.md for the portable subset and cuts.
+
 Stride Engine (MIT), used as the preferred runtime foundation:
 https://github.com/stride3d/stride
