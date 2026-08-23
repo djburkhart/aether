@@ -5,7 +5,6 @@ using System.Text;
 using Stride.Core;
 using Stride.Core.IO;
 using Stride.Core.Mathematics;
-using Stride.Engine.Design;
 using Stride.Graphics;
 using Stride.Graphics.GeometricPrimitives;
 using Stride.Rendering;
@@ -59,9 +58,17 @@ namespace Aether.Stride
                             SetStatus("stride-rtt skipped: " + reason);
                             return false;
                         }
+                        string kind = s_instance.m_effect != null ? " (lit cube)" : " (clear only)";
                         SetStatus("stride-rtt ready: " + s_instance.m_renderer +
-                            " / " + GraphicsDevice.Platform +
-                            (s_instance.m_effect != null ? " (lit cube)" : " (clear only)"));
+                            " / " + GraphicsDevice.Platform + kind);
+                        if (s_instance.m_effect == null && !string.IsNullOrEmpty(s_instance.m_shaderError))
+                        {
+                            Console.WriteLine("stride-rtt cube compile failed:");
+                            Console.WriteLine(s_instance.m_shaderError);
+                            s_statusLine = s_statusLine + Environment.NewLine +
+                                "stride-rtt cube compile failed:" + Environment.NewLine +
+                                s_instance.m_shaderError;
+                        }
                     }
                     return s_instance.Render(pixels, width, height, seconds);
                 }
@@ -125,7 +132,7 @@ namespace Aether.Stride
                 }
                 catch (Exception ex)
                 {
-                    presenter.m_shaderError = Flatten(ex);
+                    presenter.m_shaderError = ex.ToString();
                 }
 
                 return presenter;
@@ -240,18 +247,25 @@ namespace Aether.Stride
             File.WriteAllText(Path.Combine(shaderDir, "ShaderBase.sdsl"), ShaderBaseSource);
             File.WriteAllText(Path.Combine(shaderDir, "AetherViewportLit.sdsl"), LitCubeSource);
 
-            var provider = new FileSystemProvider("/", root);
-            IEffectCompiler compiler = EffectCompilerFactory.CreateEffectCompiler(
-                provider, null, "Aether.Viewport", EffectCompilationMode.Local);
+            // Unique mount — do not steal VirtualFileSystem "/".
+            var provider = new FileSystemProvider("/aether-shaders", root);
 
-            var mixin = new ShaderMixinSource();
+            // EffectCompilerFactory.CreateEffectCompiler wraps a local compiler in
+            // EffectCompilerCache, which throws ArgumentNullException
+            // ("Using the cache requires a database") when DatabaseFileProvider
+            // is null. The local EffectCompiler compiles without a Game.Run
+            // ObjectDatabase. Verified against Stride.Shaders.Compilers 4.4.0-beta5.
+            var compiler = new EffectCompiler(provider);
+            compiler.SourceDirectories.Add(EffectCompilerBase.DefaultSourceShaderFolder);
+
+            var mixin = new ShaderMixinSource { Name = "AetherViewportLit" };
             mixin.Mixins.Add(new ShaderClassSource("AetherViewportLit"));
 
             var parameters = new CompilerParameters();
             parameters.EffectParameters.Platform = GraphicsDevice.Platform;
             parameters.EffectParameters.Profile = GraphicsProfile.Level_11_0;
 
-            var results = ((EffectCompilerBase)compiler).Compile(mixin, parameters);
+            CompilerResults results = compiler.Compile(mixin, parameters);
             if (results.HasErrors)
                 throw new InvalidOperationException(results.ToText());
 

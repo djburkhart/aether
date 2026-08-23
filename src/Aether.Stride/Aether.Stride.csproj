@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.4.0-beta5" />
+    <PackageReference Include="Stride.Shaders.Compilers" Version="4.4.0-beta5" />
   </ItemGroup>
 
 </Project>
