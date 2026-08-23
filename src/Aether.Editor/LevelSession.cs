@@ -238,6 +238,70 @@ namespace Aether.Editor
         }
 
         /// <summary>
+        /// Select the Level tree node with this GameObject name. Missing names
+        /// leave the current selection unchanged and return false.</summary>
+        public bool Select(string name)
+        {
+            LevelNodeItem? item = Find(name);
+            if (item == null)
+                return false;
+            SelectedNode = item;
+            return true;
+        }
+
+        /// <summary>
+        /// CPU pick of the nearest BoundLevelScene placeholder under an
+        /// image-space pixel (origin top-left). Uses the same LookAtRH /
+        /// PerspectiveFovRH the RTT presenter uses. A miss clears
+        /// <see cref="SelectedNode"/> so the tree and property grid follow.
+        /// Does not require a GraphicsDevice.</summary>
+        public LevelNodeItem? PickAt(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                BoundSceneObject? hit = BoundScene.PickAt((float)pixelX, (float)pixelY, width, height);
+                return ApplyPick(hit);
+            }
+            catch (Exception)
+            {
+                SelectedNode = null;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Same pick as <see cref="PickAt"/> in NDC (−1..1, y up). Aspect is
+        /// the Viewport buffer width/height.</summary>
+        public LevelNodeItem? PickAtNdc(float ndcX, float ndcY, float aspect)
+        {
+            try
+            {
+                BoundSceneObject? hit = BoundScene.PickAtNdc(ndcX, ndcY, aspect);
+                return ApplyPick(hit);
+            }
+            catch (Exception)
+            {
+                SelectedNode = null;
+                return null;
+            }
+        }
+
+        private LevelNodeItem? ApplyPick(BoundSceneObject? hit)
+        {
+            if (hit == null)
+            {
+                SelectedNode = null;
+                return null;
+            }
+            if (!Select(hit.Name))
+            {
+                SelectedNode = null;
+                return null;
+            }
+            return SelectedNode;
+        }
+
+        /// <summary>
         /// Adds one game object under the root folder — enough to prove insert in this slice.</summary>
         public IGameObject AddGameObject()
         {
@@ -282,14 +346,16 @@ namespace Aether.Editor
 
         private void ReloadTree()
         {
-            string? selectedName = m_selectedNode != null ? m_selectedNode.Name : null;
+            // Rematch by DomNode so a Name edit does not drop the viewport /
+            // tree selection (LevelNodeItem.Name is a snapshot).
+            DomNode? selectedDom = m_selectedNode != null ? m_selectedNode.Node : null;
             Nodes.Clear();
 
             IGameObjectFolder? folder = Game != null ? Game.RootGameObjectFolder : null;
             if (folder != null)
                 Nodes.Add(BuildFolderItem(folder));
 
-            LevelNodeItem? match = selectedName != null ? Find(Nodes, selectedName) : null;
+            LevelNodeItem? match = selectedDom != null ? FindByNode(Nodes, selectedDom) : null;
             m_selectedNode = match;
             OnPropertyChanged(nameof(SelectedNode));
             OnPropertyChanged(nameof(StatusText));
@@ -340,6 +406,19 @@ namespace Aether.Editor
                 if (item.Name == name)
                     return item;
                 LevelNodeItem? nested = Find(item.Children, name);
+                if (nested != null)
+                    return nested;
+            }
+            return null;
+        }
+
+        private static LevelNodeItem? FindByNode(ObservableCollection<LevelNodeItem> nodes, DomNode node)
+        {
+            foreach (LevelNodeItem item in nodes)
+            {
+                if (object.ReferenceEquals(item.Node, node))
+                    return item;
+                LevelNodeItem? nested = FindByNode(item.Children, node);
                 if (nested != null)
                     return nested;
             }

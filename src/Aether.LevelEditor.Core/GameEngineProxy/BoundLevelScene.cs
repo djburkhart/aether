@@ -88,6 +88,23 @@ namespace LevelEditorCore
             return Find(name) != null;
         }
 
+        /// <summary>
+        /// Nearest placeholder under an image-space pixel. Uses
+        /// <see cref="ViewportSceneCamera"/> (same LookAt/perspective as RTT).
+        /// Null when the ray misses every cube AABB.</summary>
+        public BoundSceneObject PickAt(float pixelX, float pixelY, int width, int height)
+        {
+            return ViewportSceneCamera.PickAtPixel(this, pixelX, pixelY, width, height);
+        }
+
+        /// <summary>
+        /// Nearest placeholder under NDC (−1..1, y up). Aspect is width/height
+        /// of the same buffer the RTT presenter uses.</summary>
+        public BoundSceneObject PickAtNdc(float ndcX, float ndcY, float aspect)
+        {
+            return ViewportSceneCamera.PickAtNdc(this, ndcX, ndcY, aspect);
+        }
+
         /// <summary>Rebuild from <paramref name="game"/>. Null game clears the scene.</summary>
         public void SyncFrom(IGame game, string backend)
         {

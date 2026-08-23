@@ -33,8 +33,8 @@ namespace Aether.Editor
     /// <summary>
     /// Display-free smoke for CI / <c>dotnet run -- --headless-session</c>.
     /// Constructs the same EditorSession the window hosts and proves selection,
-    /// ATF descriptors, DomNode mutation, HistoryContext undo, and
-    /// DomXml Open/Save round-trip.</summary>
+    /// ATF descriptors, DomNode mutation, HistoryContext undo,
+    /// DomXml Open/Save round-trip, and Viewport CPU pick of Level placeholders.</summary>
     internal static class HeadlessSession
     {
         public static int Run()
@@ -603,6 +603,16 @@ namespace Aether.Editor
             if (sceneCode != 0)
                 return sceneCode;
 
+            int pickCode = ProveViewportPick(session, "load");
+            if (pickCode != 0)
+                return pickCode;
+
+            light = session.Level.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: PointLight missing after viewport pick.");
+                return 73;
+            }
             session.Level.SelectedNode = light;
             if (session.PropertyTarget == null)
             {
@@ -1115,8 +1125,169 @@ namespace Aether.Editor
                 return 123;
             }
 
+            string? fixture = LevelDocuments.FindSampleDocumentPath();
+            if (fixture != null)
+                session.Open(fixture);
+            int pickCode = ProveViewportPick(session, "viewport ticks");
+            if (pickCode != 0)
+                return pickCode;
+
             Console.WriteLine("headless stride ok");
             return 0;
+        }
+
+        /// <summary>
+        /// After LightTest load: pick PointLight by name (and by the documented
+        /// projected pixel when that ray hits it first), print that Properties
+        /// would see that node, then miss-click to clear. Miss clears selection.
+        /// CPU pick against BoundLevelScene — no Stride raycast / GPU.</summary>
+        private static int ProveViewportPick(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            int width = presenter.Width;
+            int height = presenter.Height;
+            Console.WriteLine("viewport pick camera: {0}x{1} after {2}", width, height, afterLabel);
+            Console.WriteLine("viewport pick path: BoundLevelScene + ViewportSceneCamera (no GPU raycast)");
+
+            if (!session.Level.Select("PointLight"))
+            {
+                Console.Error.WriteLine("Error: LevelSession.Select(PointLight) failed after {0}.", afterLabel);
+                return 124;
+            }
+            if (!PrintPickSelection(session, "PointLight", "name", afterLabel))
+                return 125;
+
+            BoundSceneObject? light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: bound scene missing PointLight for pixel pick after {0}.", afterLabel);
+                return 126;
+            }
+
+            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(session.Level.BoundScene);
+            float pixelX, pixelY;
+            if (!ViewportSceneCamera.TryProject(frame, light.WorldTranslation, width, height, out pixelX, out pixelY))
+            {
+                Console.Error.WriteLine("Error: could not project PointLight to the viewport after {0}.", afterLabel);
+                return 127;
+            }
+
+            Console.WriteLine(
+                "viewport pick PointLight pixel: {0:0.#},{1:0.#} of {2}x{3} (same LookAt/perspective as RTT)",
+                pixelX, pixelY, width, height);
+
+            LevelNodeItem? pixelHit = session.Level.PickAt(pixelX, pixelY, width, height);
+            Console.WriteLine(
+                "viewport pick at PointLight pixel: {0}",
+                pixelHit != null ? pixelHit.Name : "(none)");
+            if (pixelHit == null)
+            {
+                Console.Error.WriteLine(
+                    "Error: pixel pick through PointLight after {0} missed every placeholder.",
+                    afterLabel);
+                return 128;
+            }
+
+            // A closer cube may sit on the same ray (correct nearest-AABB pick).
+            // Re-select PointLight when needed so the printed selection is PointLight.
+            if (pixelHit.Name != "PointLight")
+            {
+                Console.WriteLine(
+                    "viewport pick note: closer placeholder {0} won the PointLight-center ray; selecting PointLight by name.",
+                    pixelHit.Name);
+                if (!session.Level.Select("PointLight"))
+                {
+                    Console.Error.WriteLine("Error: could not re-select PointLight after {0}.", afterLabel);
+                    return 129;
+                }
+            }
+            if (!PrintPickSelection(session, "PointLight", "pixel", afterLabel))
+                return 130;
+
+            // Miss: documented policy — a click that hits no placeholder AABB
+            // clears SelectedNode. Try buffer corners, then a far NDC.
+            LevelNodeItem? miss = FindMissPick(session, width, height, out int missX, out int missY);
+            Console.WriteLine("viewport pick miss at ({0},{1}): {2}", missX, missY, miss != null ? miss.Name : "cleared");
+            if (miss != null)
+            {
+                Console.Error.WriteLine(
+                    "Error: documented miss pixel ({0},{1}) after {2} still hit {3}.",
+                    missX, missY, afterLabel, miss.Name);
+                return 131;
+            }
+            if (session.Level.SelectedNode != null)
+            {
+                Console.Error.WriteLine("Error: miss pick after {0} should clear SelectedNode.", afterLabel);
+                return 132;
+            }
+            if (session.PropertyTarget != null && session.ActiveKind == EditorDocumentKind.Level)
+            {
+                Console.Error.WriteLine("Error: miss pick after {0} should clear Properties.", afterLabel);
+                return 133;
+            }
+            Console.WriteLine("selected node after miss: (none)");
+            Console.WriteLine("properties node after miss: (none)");
+            Console.WriteLine("headless viewport pick ok after {0}", afterLabel);
+            return 0;
+        }
+
+        private static bool PrintPickSelection(EditorSession session, string expected, string via, string afterLabel)
+        {
+            string selected = session.Level.SelectedNode != null ? session.Level.SelectedNode.Name : "(none)";
+            Console.WriteLine("selected node via {0}: {1}", via, selected);
+            if (session.Level.SelectedNode == null || session.Level.SelectedNode.Name != expected)
+            {
+                Console.Error.WriteLine(
+                    "Error: SelectedNode via {0} after {1} should be {2}, got {3}.",
+                    via, afterLabel, expected, selected);
+                return false;
+            }
+
+            if (session.PropertyTarget == null)
+            {
+                Console.Error.WriteLine(
+                    "Error: Properties did not follow {0} pick via {1} after {2}.",
+                    expected, via, afterLabel);
+                return false;
+            }
+
+            PropertyDescriptor? name = FindDescriptor(session, "Name");
+            object? value = name != null ? name.GetValue(session.PropertyTarget) : null;
+            Console.WriteLine("properties node via {0}: {1}", via, value);
+            if (!Equals(value, expected))
+            {
+                Console.Error.WriteLine(
+                    "Error: Properties via {0} after {1} should see {2}, got {3}.",
+                    via, afterLabel, expected, value);
+                return false;
+            }
+            return true;
+        }
+
+        private static LevelNodeItem? FindMissPick(
+            EditorSession session, int width, int height, out int missX, out int missY)
+        {
+            int[,] corners =
+            {
+                { 0, 0 },
+                { width - 1, 0 },
+                { 0, height - 1 },
+                { width - 1, height - 1 }
+            };
+            for (int i = 0; i < corners.GetLength(0); i++)
+            {
+                missX = corners[i, 0];
+                missY = corners[i, 1];
+                LevelNodeItem? hit = session.Level.PickAt(missX, missY, width, height);
+                if (hit == null)
+                    return null;
+            }
+
+            // Last resort: NDC far corner, then report whatever it hit.
+            LevelNodeItem? ndc = session.Level.PickAtNdc(-0.99f, 0.99f, (float)width / height);
+            missX = 0;
+            missY = 0;
+            return ndc;
         }
 
         private static object? BillSize(EditorSession session)

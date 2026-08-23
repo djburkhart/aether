@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -17,6 +18,7 @@ namespace Aether.Editor.Views
             AttachedToVisualTree += OnAttached;
             DetachedFromVisualTree += OnDetached;
             SizeChanged += OnSizeChanged;
+            PointerPressed += OnPointerPressed;
         }
 
         private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -52,6 +54,37 @@ namespace Aether.Editor.Views
         private void OnTick(object? sender, EventArgs e)
         {
             Present();
+        }
+
+        /// <summary>
+        /// Left-click the Image: CPU-pick the nearest Level placeholder and
+        /// set LevelSession.SelectedNode. A miss clears selection. Never throws.</summary>
+        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            try
+            {
+                if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                    return;
+                if (DataContext is not EditorSession session)
+                    return;
+                ViewportPresenter? presenter = session.Viewport.Presenter;
+                if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
+                    return;
+
+                Point point = e.GetPosition(FrameImage);
+                double imageW = FrameImage.Bounds.Width;
+                double imageH = FrameImage.Bounds.Height;
+                if (imageW < 1 || imageH < 1)
+                    return;
+
+                double pixelX = point.X / imageW * presenter.Width;
+                double pixelY = point.Y / imageH * presenter.Height;
+                session.Level.PickAt(pixelX, pixelY, presenter.Width, presenter.Height);
+                e.Handled = true;
+            }
+            catch (Exception)
+            {
+            }
         }
 
         private void Present()

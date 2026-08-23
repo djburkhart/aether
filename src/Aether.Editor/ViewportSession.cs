@@ -54,7 +54,7 @@ namespace Aether.Editor
                     : "no level scene";
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
-                    " · " + scene + " · #2741 open";
+                    " · " + scene + " · click to pick · #2741 open";
             }
         }
 
