@@ -238,6 +238,70 @@ namespace Aether.Editor
         }
 
         /// <summary>
+        /// Select the Level tree node with this GameObject name. Missing names
+        /// leave the current selection unchanged and return false.</summary>
+        public bool Select(string name)
+        {
+            LevelNodeItem? item = Find(name);
+            if (item == null)
+                return false;
+            SelectedNode = item;
+            return true;
+        }
+
+        /// <summary>
+        /// CPU pick of the nearest BoundLevelScene placeholder under an
+        /// image-space pixel (origin top-left). Uses the same LookAtRH /
+        /// PerspectiveFovRH the RTT presenter uses. A miss clears
+        /// <see cref="SelectedNode"/> so the tree and property grid follow.
+        /// Does not require a GraphicsDevice.</summary>
+        public LevelNodeItem? PickAt(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                BoundSceneObject? hit = BoundScene.PickAt((float)pixelX, (float)pixelY, width, height);
+                return ApplyPick(hit);
+            }
+            catch (Exception)
+            {
+                SelectedNode = null;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Same pick as <see cref="PickAt"/> in NDC (−1..1, y up). Aspect is
+        /// the Viewport buffer width/height.</summary>
+        public LevelNodeItem? PickAtNdc(float ndcX, float ndcY, float aspect)
+        {
+            try
+            {
+                BoundSceneObject? hit = BoundScene.PickAtNdc(ndcX, ndcY, aspect);
+                return ApplyPick(hit);
+            }
+            catch (Exception)
+            {
+                SelectedNode = null;
+                return null;
+            }
+        }
+
+        private LevelNodeItem? ApplyPick(BoundSceneObject? hit)
+        {
+            if (hit == null)
+            {
+                SelectedNode = null;
+                return null;
+            }
+            if (!Select(hit.Name))
+            {
+                SelectedNode = null;
+                return null;
+            }
+            return SelectedNode;
+        }
+
+        /// <summary>
         /// Adds one game object under the root folder — enough to prove insert in this slice.</summary>
         public IGameObject AddGameObject()
         {

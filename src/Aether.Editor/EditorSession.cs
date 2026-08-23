@@ -693,6 +693,8 @@ namespace Aether.Editor
             {
                 if (Level.SelectedNode != null)
                     ActivateLevel();
+                else if (m_activeKind == EditorDocumentKind.Level)
+                    RefreshLevelPropertyTarget();
                 return;
             }
 

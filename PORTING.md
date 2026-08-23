@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, viewport CPU pick of PointLight, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
 
 ---
 
@@ -799,10 +799,24 @@ When a `GraphicsDevice` exists, `StrideGameEngine` is the Level `IGameEngineProx
 
 When device init fails (ubuntu CI, `ErrorIncompatibleDriver`), `NullGameEngine` stays the backend and the Viewport stays on the software cube. `BoundLevelScene` still snapshots the loaded `IGame` so headless can print object count and PointLight by name without crashing `Tick` / `TryRender`.
 
+## Viewport pick (Level selection)
+
+A left click on the Viewport `Image` CPU-picks the nearest GameObject placeholder and sets `LevelSession.SelectedNode` / `SelectionContext` so the Level tree highlight and Properties follow. Pick does **not** use a Stride GPU raycast.
+
+| Piece | Behavior |
+|---|---|
+| Camera | Same LookAtRH / PerspectiveFovRH framing as `StrideRttPresenter.DrawPlaceholders` (`ViewportSceneCamera`). |
+| Hit | Ray vs axis-aligned cube at each `BoundSceneObject.WorldTranslation` (half-extents = 1.15 cube × clamped scale). Nearest hit wins. |
+| Miss | Clears `SelectedNode` (and the property grid when Level is active). Documented; not “leave selection”. |
+| Headless | `LevelSession.Select(name)`, `PickAt(pixelX, pixelY, width, height)`, `PickAtNdc(ndcX, ndcY, aspect)`. CI projects PointLight through that camera, prints the selection, then a corner miss. |
+| Linux / no GPU | Software WriteableBitmap present path is unchanged. Pick still runs on `BoundLevelScene`. |
+
+Out of scope here: gizmos, transform drag, multi-select, official Avalonia Game control (#2741).
+
 ## Next cut
 
 1. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
-2. Gizmos, pick, play-in-editor physics, and real asset meshes are still out of scope.
+2. Gizmos, play-in-editor physics, and real asset meshes are still out of scope.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

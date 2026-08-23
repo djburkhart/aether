@@ -5,7 +5,8 @@
     <Image x:Name="FrameImage"
            Stretch="Fill"
            HorizontalAlignment="Stretch"
-           VerticalAlignment="Stretch" />
+           VerticalAlignment="Stretch"
+           IsHitTestVisible="True" />
     <Border VerticalAlignment="Bottom"
             HorizontalAlignment="Stretch"
             Background="#99000000"

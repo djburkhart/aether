@@ -12,6 +12,8 @@ using Stride.Rendering;
 using Stride.Shaders;
 using Stride.Shaders.Compiler;
 
+using LevelEditorCore;
+
 namespace Aether.Stride
 {
     /// <summary>
@@ -159,7 +161,7 @@ namespace Aether.Stride
                     presenter.m_effect = CompileLitCube(device, presenter.m_context);
                     step = "cube-mesh";
                     if (presenter.m_effect != null)
-                        presenter.m_cube = GeometricPrimitive.Cube.New(device, 1.15f, 1f, 1f, false);
+                        presenter.m_cube = GeometricPrimitive.Cube.New(device, ViewportSceneCamera.CubeSize, 1f, 1f, false);
                 }
                 catch (Exception ex)
                 {
@@ -239,35 +241,29 @@ namespace Aether.Stride
 
         private void DrawPlaceholders(int width, int height, ScenePlaceholder[] placeholders)
         {
-            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
-            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+            var positions = new Sce.Atf.VectorMath.Vec3F[placeholders.Length];
             for (int i = 0; i < placeholders.Length; i++)
             {
                 ScenePlaceholder p = placeholders[i];
-                if (p.X < minX) minX = p.X;
-                if (p.Y < minY) minY = p.Y;
-                if (p.Z < minZ) minZ = p.Z;
-                if (p.X > maxX) maxX = p.X;
-                if (p.Y > maxY) maxY = p.Y;
-                if (p.Z > maxZ) maxZ = p.Z;
+                positions[i] = new Sce.Atf.VectorMath.Vec3F(p.X, p.Y, p.Z);
             }
 
-            var center = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
-            float radius = Math.Max(Math.Max(maxX - minX, maxY - minY), maxZ - minZ);
-            if (radius < 6f)
-                radius = 6f;
-            var eye = center + new Vector3(radius * 0.95f, radius * 0.65f, radius * 1.15f);
+            // Same framing ViewportSceneCamera uses for CPU pick (no GPU raycast).
+            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(positions);
+            var eye = new Vector3(frame.Eye.X, frame.Eye.Y, frame.Eye.Z);
+            var center = new Vector3(frame.Center.X, frame.Center.Y, frame.Center.Z);
 
             float aspect = height > 0 ? (float)width / height : 1f;
             var view = Matrix.LookAtRH(eye, center, Vector3.UnitY);
-            var projection = Matrix.PerspectiveFovRH((float)Math.PI / 4f, aspect, 0.1f, radius * 8f + 32f);
+            var projection = Matrix.PerspectiveFovRH(
+                ViewportSceneCamera.FovY, aspect, frame.Near, frame.Far);
 
             for (int i = 0; i < placeholders.Length; i++)
             {
                 ScenePlaceholder p = placeholders[i];
-                float sx = ClampPlaceholderScale(p.Sx);
-                float sy = ClampPlaceholderScale(p.Sy);
-                float sz = ClampPlaceholderScale(p.Sz);
+                float sx = ViewportSceneCamera.ClampPlaceholderScale(p.Sx);
+                float sy = ViewportSceneCamera.ClampPlaceholderScale(p.Sy);
+                float sz = ViewportSceneCamera.ClampPlaceholderScale(p.Sz);
                 var world = Matrix.Scaling(sx, sy, sz) *
                     Matrix.RotationYawPitchRoll(p.Ry, p.Rx, p.Rz) *
                     Matrix.Translation(p.X, p.Y, p.Z);
@@ -283,17 +279,6 @@ namespace Aether.Stride
             m_effect.Parameters.Set(ColorKey, color);
             m_effect.UpdateEffect(m_device);
             m_cube.Draw(m_context, m_effect);
-        }
-
-        private static float ClampPlaceholderScale(float scale)
-        {
-            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f)
-                return 0.7f;
-            if (scale < 0.35f)
-                return 0.35f;
-            if (scale > 1.75f)
-                return 1.75f;
-            return scale;
         }
 
         private static Color4 PlaceholderColor(int index)
