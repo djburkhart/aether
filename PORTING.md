@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor). Windows CI is not required; no Windows-only API remains in the compiled set.
 
 ---
 
@@ -605,4 +605,50 @@ File Open detects `.timeline` (or a `timeline` XML root) and routes to the timel
 dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
   testdata/atf/TimelineEditor/timeline.xsd testdata/atf/TimelineEditor/Schema.cs \
   timeline TimelineEditorSample --check
+```
+
+---
+
+# LevelEditor first slice (schema + GameObject data model)
+
+First port of SonyWWS LevelEditor into Aether as a **data model**: GameObjects, transforms, hierarchy, resource-ref URIs. Not a 3D editor and not a DX11/WinForms port.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream | https://github.com/SonyWWS/LevelEditor (fork: https://github.com/djburkhart/LevelEditor) |
+| Portable core | `LevelEditorCore` (Interfaces, Utils, GameEngineProxy types) |
+| Sample adapters | `LevelEditor/DomNodeAdapters` |
+| Schema | `LevelEditor/schemas/level_editor.xsd` + included `gap.xsd` (namespace `gap`) |
+| Sample document | `SampleLevels/LightTest.lvl` (10 game objects, 7 top-level, one group) |
+| Destination core | `src/Aether.LevelEditor.Core` |
+| Destination sample | `src/Aether.Level` |
+| Fixtures | `testdata/atf/LevelEditor/` (`level_editor.xsd`, `gap.xsd`, generated `Schema.cs`, `LightTest.lvl`) |
+| Destination TFM | `net10.0` |
+
+The hypothesis held: LevelEditorCore + DomNodeAdapters + schemas are portable. **GameEngineProxy is the cut line.** A no-op `NullGameEngine` implements `IGameEngineProxy` so adapters can sit behind it. Nothing pretends a renderer exists.
+
+## Cut line
+
+**Ported (data):** `IGame` / `IGameObject` / `IGameObjectFolder` / `IGameObjectGroup` / `ITransformable` / `INameable` / `IVisible` / `ILockable` / `IHierarchical` / `IGrid` / `ISchemaLoader` / `IGameEngineProxy`. `DomNodeUtil`, `TransformUtils.CalcTransform`, `EngineInfo` / `ResourceInfo`, `NullGameEngine`. Sample `Game` / `GameObject` / `GameObjectFolder` / `GameObjectGroup` / `Grid` / `TransformUpdater` / `ResourceReference` (URI only). SchemaLoader registers those adapters plus `HistoryContext`, `SelectionContext`, `UniqueIdValidator`, and `ObservableCustomTypeDescriptorNodeAdapter`.
+
+**Not ported:** `LevelEditorNativeRendering`, `LvEdRenderingEngine`, `NativeInterop`, `NativeDesignControl`, WinForms `GameEditor` / ProjectLister / DesignView, camera controllers, manipulators, terrain gob adapters, prefab / curve / locator / layer / bookmark adapters, `CustomDomXmlReader` resource remapping, `IListable` (`ItemInfo` / `ImageList`), `IGrid.Project` (needs `Camera`), `CalcSnapFromOffset` / `RotateToVector` (AABB / `AxisSystemType`).
+
+Vendored ATF under LevelEditor `ATF/` was **not** copied. Aether.Atf.Core / Commands / PropertyEditing already on main are the ATF layer.
+
+## Hierarchy view
+
+No 3D viewport. The Avalonia shell adds a Level pane: a TreeView of folders / groups / game objects. Select a GameObject; the existing PropertyGrid binds its `ICustomTypeDescriptor`. Adding one GameObject is enough beyond loading `LightTest.lvl`.
+
+File Open detects `.lvl` (or a `game` XML root in namespace `gap`) and routes to the level session. UsingDom, Circuit, and Timeline documents stay loaded. Undo/Save follow the last-activated document.
+
+## Headless proof
+
+`--headless-session` loads `LightTest.lvl`, asserts 10 game objects / 7 top-level, checks PointLight translate X, selects PointLight, edits Name through ATF descriptors, undoes, adds one GameObject, Save As / reopen.
+
+```bash
+dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
+  testdata/atf/LevelEditor/level_editor.xsd testdata/atf/LevelEditor/Schema.cs \
+  gap LevelEditor --check
 ```

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Aether.Level</RootNamespace>
+    <AssemblyName>Aether.Level</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <Description>LevelEditor sample adapters, schema loader, and DomXml document helpers for Aether. No native renderer.</Description>
+    <Product>Aether Engine</Product>
+    <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\testdata\atf\LevelEditor\Schema.cs" Link="Schema.cs" />
+    <Content Include="..\..\testdata\atf\LevelEditor\level_editor.xsd" Link="level_editor.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\LevelEditor\gap.xsd" Link="gap.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\LevelEditor\LightTest.lvl" Link="LightTest.lvl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Commands\Aether.Atf.Commands.csproj" />
+    <ProjectReference Include="..\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\Aether.LevelEditor.Core\Aether.LevelEditor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

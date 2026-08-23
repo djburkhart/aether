@@ -10,13 +10,15 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia layout, UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. No Stride viewport. See [PORTING.md](PORTING.md).
+Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia layout, UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, LevelEditor object hierarchy, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. No Stride viewport. See [PORTING.md](PORTING.md).
 
 Phase 0 (merged): `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen` / `aether-domgen`, and the headless UsingDom sample.
 
 CircuitEditor first slice: `src/Aether.Atf.Circuit` (portable graph interfaces + DOM adapters) and `src/Aether.Circuit` (CircuitEditor schema loader, runtime module types, DomXml helpers). The committed sample is `testdata/atf/CircuitEditor/Example.circuit`.
 
 TimelineEditor first slice: `src/Aether.Atf.Timeline` (portable group/track/interval interfaces) and `src/Aether.Timeline` (TimelineEditor adapters, schema loader, DomXml helpers). The committed sample is `testdata/atf/TimelineEditor/100.timeline`.
+
+LevelEditor first slice: `src/Aether.LevelEditor.Core` (portable GameObject / transform / hierarchy interfaces and a no-op `IGameEngineProxy`) and `src/Aether.Level` (LevelEditor adapters, schema loader, DomXml helpers). The committed sample is `testdata/atf/LevelEditor/LightTest.lvl`. No 3D viewport.
 
 Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred editor UI is Avalonia. Stride's official Avalonia Game Studio is not ready enough to be our tools host; we build the authoring layer.
 
@@ -35,7 +37,7 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 dotnet run -c Release --project samples/UsingDom
 ```
 
-`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). File > Open / Save / Save As / New persist UsingDom XML, CircuitEditor `.circuit`, and TimelineEditor `.timeline` files via Core `DomXmlReader` / `DomXmlWriter`. Committed samples: `testdata/atf/UsingDom/ogre-adventure-ii.xml`, `testdata/atf/CircuitEditor/Example.circuit`, and `testdata/atf/TimelineEditor/100.timeline`. Host plugins load from `plugins/` next to the executable (the sample `Hello Aether` contribution becomes a dock pane). `--headless-session` checks UsingDom selection / property edit / undo / XML round-trip, sample plugin DI, CircuitEditor load (9 modules / 8 wires), then TimelineEditor load (10 tracks / 60 intervals), property edit, add interval, and save/reopen.
+`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). File > Open / Save / Save As / New persist UsingDom XML, CircuitEditor `.circuit`, TimelineEditor `.timeline`, and LevelEditor `.lvl` files via Core `DomXmlReader` / `DomXmlWriter`. Committed samples: `testdata/atf/UsingDom/ogre-adventure-ii.xml`, `testdata/atf/CircuitEditor/Example.circuit`, `testdata/atf/TimelineEditor/100.timeline`, and `testdata/atf/LevelEditor/LightTest.lvl`. Host plugins load from `plugins/` next to the executable (the sample `Hello Aether` contribution becomes a dock pane). `--headless-session` checks UsingDom selection / property edit / undo / XML round-trip, sample plugin DI, CircuitEditor load (9 modules / 8 wires), TimelineEditor load (10 tracks / 60 intervals), then LevelEditor load (10 game objects / PointLight translate), property edit, add object, and save/reopen.
 
 ## Docs
 

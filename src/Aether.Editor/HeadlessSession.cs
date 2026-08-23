@@ -4,11 +4,13 @@ using System.IO;
 using System.Linq;
 
 using Aether.Circuit;
+using Aether.Level;
 using Aether.Timeline;
 using Aether.Plugins;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using Sce.Atf.Adaptation;
 using Sce.Atf.Controls.PropertyEditing;
 
 using UsingDom;
@@ -48,7 +50,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProveTimeline(session);
+            code = ProveTimeline(session);
+            if (code != 0)
+                return code;
+
+            return ProveLevel(session);
         }
 
         public static int WriteFixture()
@@ -505,6 +511,137 @@ namespace Aether.Editor
             }
 
             Console.WriteLine("headless timeline ok");
+            return 0;
+        }
+
+        private static int ProveLevel(EditorSession session)
+        {
+            string? fixture = LevelDocuments.FindSampleDocumentPath();
+            if (fixture == null)
+            {
+                Console.Error.WriteLine("Error: could not find testdata/atf/LevelEditor/LightTest.lvl");
+                return 70;
+            }
+
+            Console.WriteLine("level fixture: {0}", fixture);
+            session.Open(fixture);
+            if (session.ActiveKind != EditorDocumentKind.Level)
+            {
+                Console.Error.WriteLine("Error: Open of LightTest.lvl did not activate the level document.");
+                return 71;
+            }
+
+            int objects = session.Level.GameObjectCount;
+            int top = session.Level.TopLevelCount;
+            Console.WriteLine("level game objects: {0}", objects);
+            Console.WriteLine("level top-level: {0}", top);
+            if (objects != LevelDocuments.ExampleGameObjectCount || top != LevelDocuments.ExampleTopLevelCount)
+            {
+                Console.Error.WriteLine(
+                    "Error: LightTest.lvl should have {0} game objects ({1} top-level), got {2}/{3}.",
+                    LevelDocuments.ExampleGameObjectCount,
+                    LevelDocuments.ExampleTopLevelCount,
+                    objects,
+                    top);
+                return 72;
+            }
+
+            LevelNodeItem? light = session.Level.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: LightTest.lvl is missing PointLight.");
+                return 73;
+            }
+
+            var gob = light.Node.As<LevelEditorCore.IGameObject>();
+            if (gob == null)
+            {
+                Console.Error.WriteLine("Error: PointLight did not adapt to IGameObject.");
+                return 74;
+            }
+
+            float tx = gob.Translation.X;
+            Console.WriteLine("PointLight translate X: {0}", tx);
+            if (Math.Abs(tx - LevelDocuments.ExamplePointLightTranslateX) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: PointLight translate X should be {0}, got {1}.",
+                    LevelDocuments.ExamplePointLightTranslateX,
+                    tx);
+                return 75;
+            }
+
+            session.Level.SelectedNode = light;
+            if (session.PropertyTarget == null)
+            {
+                Console.Error.WriteLine("Error: selecting PointLight did not produce an ICustomTypeDescriptor target.");
+                return 76;
+            }
+
+            PropertyDescriptor? name = FindDescriptor(session, "Name");
+            if (name == null)
+            {
+                Console.Error.WriteLine("Error: selected PointLight is missing Name descriptor.");
+                return 77;
+            }
+
+            object? before = name.GetValue(session.PropertyTarget);
+            Console.WriteLine("PointLight Name before: {0}", before);
+            PropertyUtils.SetProperty(light.Node, name, "KeyLight");
+            object? after = name.GetValue(session.PropertyTarget);
+            Console.WriteLine("PointLight Name after edit: {0}", after);
+            if (!Equals(after, "KeyLight"))
+            {
+                Console.Error.WriteLine("Error: level property edit did not change the object name.");
+                return 78;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: level HistoryContext did not record the edit.");
+                return 79;
+            }
+
+            session.Undo();
+            object? undone = name.GetValue(session.PropertyTarget ?? (object)light.Node);
+            Console.WriteLine("PointLight Name after undo: {0}", undone);
+            if (!Equals(undone, before))
+            {
+                Console.Error.WriteLine("Error: level undo did not restore Name.");
+                return 80;
+            }
+
+            session.AddLevelGameObject();
+            int afterAdd = session.Level.GameObjectCount;
+            Console.WriteLine("level after add: {0} game objects", afterAdd);
+            if (afterAdd != LevelDocuments.ExampleGameObjectCount + 1)
+            {
+                Console.Error.WriteLine("Error: Add GameObject should add one game object.");
+                return 81;
+            }
+
+            string temp = Path.Combine(Path.GetTempPath(), "aether-level-roundtrip-" + Guid.NewGuid().ToString("N") + ".lvl");
+            try
+            {
+                session.SaveAs(temp);
+                session.Level.LoadExample();
+                session.Open(temp);
+                if (session.Level.GameObjectCount != afterAdd ||
+                    session.Level.Find("PointLight") == null)
+                {
+                    Console.Error.WriteLine(
+                        "Error: reopened level should have {0} game objects and PointLight, got {1}.",
+                        afterAdd,
+                        session.Level.GameObjectCount);
+                    return 82;
+                }
+            }
+            finally
+            {
+                try { File.Delete(temp); } catch (IOException) { }
+            }
+
+            Console.WriteLine("headless level ok");
             return 0;
         }
 
