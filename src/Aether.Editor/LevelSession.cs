@@ -346,14 +346,16 @@ namespace Aether.Editor
 
         private void ReloadTree()
         {
-            string? selectedName = m_selectedNode != null ? m_selectedNode.Name : null;
+            // Rematch by DomNode so a Name edit does not drop the viewport /
+            // tree selection (LevelNodeItem.Name is a snapshot).
+            DomNode? selectedDom = m_selectedNode != null ? m_selectedNode.Node : null;
             Nodes.Clear();
 
             IGameObjectFolder? folder = Game != null ? Game.RootGameObjectFolder : null;
             if (folder != null)
                 Nodes.Add(BuildFolderItem(folder));
 
-            LevelNodeItem? match = selectedName != null ? Find(Nodes, selectedName) : null;
+            LevelNodeItem? match = selectedDom != null ? FindByNode(Nodes, selectedDom) : null;
             m_selectedNode = match;
             OnPropertyChanged(nameof(SelectedNode));
             OnPropertyChanged(nameof(StatusText));
@@ -404,6 +406,19 @@ namespace Aether.Editor
                 if (item.Name == name)
                     return item;
                 LevelNodeItem? nested = Find(item.Children, name);
+                if (nested != null)
+                    return nested;
+            }
+            return null;
+        }
+
+        private static LevelNodeItem? FindByNode(ObservableCollection<LevelNodeItem> nodes, DomNode node)
+        {
+            foreach (LevelNodeItem item in nodes)
+            {
+                if (object.ReferenceEquals(item.Node, node))
+                    return item;
+                LevelNodeItem? nested = FindByNode(item.Children, node);
                 if (nested != null)
                     return nested;
             }

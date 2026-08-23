@@ -607,6 +607,12 @@ namespace Aether.Editor
             if (pickCode != 0)
                 return pickCode;
 
+            light = session.Level.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: PointLight missing after viewport pick.");
+                return 73;
+            }
             session.Level.SelectedNode = light;
             if (session.PropertyTarget == null)
             {
