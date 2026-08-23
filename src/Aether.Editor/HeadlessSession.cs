@@ -6,6 +6,7 @@ using System.Linq;
 using Aether.Circuit;
 using Aether.Level;
 using Aether.Scripting;
+using Aether.Stride;
 using Aether.Timeline;
 using Aether.Plugins;
 
@@ -63,7 +64,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProveDebugger(session);
+            code = ProveDebugger(session);
+            if (code != 0)
+                return code;
+
+            return ProveStride(session);
         }
 
         public static int WriteFixture()
@@ -810,6 +815,51 @@ namespace Aether.Editor
             }
 
             Console.WriteLine("headless {0} pause/continue ok", label);
+            return 0;
+        }
+
+        private static int ProveStride(EditorSession session)
+        {
+            StrideHostResult result = session.Viewport.Result;
+            Console.WriteLine("stride package: {0} {1}", StrideHost.PackageId, StrideHost.PackageVersion);
+            Console.WriteLine("stride engine loaded: {0}", result.EngineLoaded);
+            Console.WriteLine("stride game constructed: {0}", result.GameConstructed);
+            Console.WriteLine("stride headless context: {0}", result.HeadlessContextAvailable);
+            Console.WriteLine("stride window: {0}", result.WindowTypeName ?? "(none)");
+            Console.WriteLine("stride in-pane present: {0}", result.InPanePresentAvailable);
+            Console.WriteLine("stride path: {0}", result.PresentPath);
+            if (!string.IsNullOrEmpty(result.PresentError))
+                Console.WriteLine("stride device error: {0}", result.PresentError);
+            if (!string.IsNullOrEmpty(result.PresentBlocker))
+                Console.WriteLine("stride blocker: {0}", result.PresentBlocker);
+
+            if (!result.EngineLoaded)
+            {
+                Console.Error.WriteLine("Error: Stride.Engine did not load.");
+                return 110;
+            }
+            if (!result.GameConstructed)
+            {
+                Console.Error.WriteLine("Error: Stride Game was not constructed. {0}", result.LoadError);
+                return 111;
+            }
+            if (!result.HeadlessContextAvailable)
+            {
+                Console.Error.WriteLine("Error: GameContextHeadless is not available.");
+                return 112;
+            }
+            if (!result.WindowCreated || string.IsNullOrEmpty(result.WindowTypeName))
+            {
+                Console.Error.WriteLine("Error: GameContextHeadless did not create a GameWindow.");
+                return 114;
+            }
+            if (result.InPanePresentAvailable)
+            {
+                Console.Error.WriteLine("Error: spike must not claim in-pane present while #2741 is open.");
+                return 113;
+            }
+
+            Console.WriteLine("headless stride ok");
             return 0;
         }
 

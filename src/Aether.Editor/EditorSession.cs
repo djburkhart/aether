@@ -50,6 +50,7 @@ namespace Aether.Editor
             Script = new ScriptSession(() => Game, () => History);
             Script.Ran += OnScriptRan;
             Script.Paused += OnScriptPaused;
+            Viewport = new ViewportSession();
             New();
         }
 
@@ -78,6 +79,8 @@ namespace Aether.Editor
         public LevelSession Level { get; }
 
         public ScriptSession Script { get; }
+
+        public ViewportSession Viewport { get; }
 
         public EditorDocumentKind ActiveKind
         {

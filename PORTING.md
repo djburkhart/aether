@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts against UsingDom, then pause/continue on a breakpoint before Bill Size changes). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts against UsingDom, pause/continue on a breakpoint before Bill Size changes, then Stride Game + GameContextHeadless init). Windows CI is not required; the compiled set stays net10.0.
 
 ---
 
@@ -747,6 +747,47 @@ void Log(string message)
 4. Run `testdata/scripts/resize-bill.lua`, assert Bill Size == 14
 5. Set a breakpoint on line 2 of `resize-bill.csx`, `BeginRun`, assert paused and Bill Size still 12, Continue, assert Size 14
 6. Same pause/continue proof for `resize-bill.lua`
+
+```bash
+dotnet run -c Release --project src/Aether.Editor -- --headless-session
+```
+
+---
+
+# Stride viewport spike (Avalonia embed)
+
+Exploratory. **Does not claim WYSIWYG or play-in-editor.** Does not claim [stride3d/stride#2741](https://github.com/stride3d/stride/issues/2741) is solved. `NullGameEngine` is still the LevelEditor `IGameEngineProxy`.
+
+## What we tried
+
+| Option | Result |
+|---|---|
+| Official `Stride.Engine` **4.3.0.2507** (stable, net10) | Restores. **No** `GameContextHeadless` / `GameWindowHeadless` in that package. |
+| Official `Stride.Engine` **4.4.0-beta5** (chosen) | Restores on net10.0. Has `GameContextHeadless`, `GameWindowHeadless`, `HeadlessGraphicsPresenter`. |
+| `Game.Run(new GameContextHeadless(64, 64))` on this Linux VM | `Game` constructs. `WindowCreated` fires with `GameWindowHeadless`. Then `GraphicsAdapterFactory` throws **`Failed to create vulkan instance: ErrorIncompatibleDriver`**. No frames. |
+| Null graphics backend | Removed in Stride 4.4. Headless still needs a real graphics API. |
+| In-pane Avalonia control | **#2741 is still open** (created 2025-04-28, last comment 2025-06-23 asking for a draft PR). Scene/prefab editors (#2751 / #2752) are blocked on it. `xplat-editor` is stale vs master. |
+| WPF `GameEngineHost` child HWND | Windows-only. Not used. Next experiment if we add a `net10.0-windows` present project. |
+| AvaStride / Doprez.Stride.Avalonia | Avalonia UI **inside** the game, not an Avalonia-hosted tools viewport. Wrong direction. |
+| NativeControlHost + Vulkan/OpenGL swapchain | Not implemented. Would still need a device this CI host does not have, and an Avalonia present contract #2741 does not provide. |
+
+## What worked
+
+- NuGet is enough. The Stride source tree was **not** vendored.
+- `src/Aether.Stride` constructs `Stride.Engine.Game` and runs `GameContextHeadless`.
+- Headless CI asserts: engine loaded, `Game` constructed, `GameContextHeadless` available, `GameWindowHeadless` created, **in-pane present is false**.
+- Viewport dock pane shows that status. It does not draw a cube or a clear-color swapchain.
+
+## Blocker
+
+1. **#2741** — no official Avalonia control that hosts a Stride game with input and resize.
+2. **This CI VM** — no usable Vulkan adapter. Device creation fails after the headless window exists. That is an environment limit, not a solved embed.
+
+## Recommended next cut
+
+1. On a Windows machine with D3D: try NativeControlHost + the WPF `GameEngineHost` HWND pattern (`net10.0-windows` extra project; keep ubuntu `net10.0` compiling).
+2. Re-check #2741 / `xplat-editor` for an Avalonia `Game` control. Adopt it when it exists; do not invent a second present stack.
+3. Only then consider replacing `NullGameEngine` with a Stride `IGameEngineProxy`. Not before frames present.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

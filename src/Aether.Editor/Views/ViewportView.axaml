@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aether.Editor.Views.ViewportView">
+  <DockPanel Margin="8">
+    <TextBlock DockPanel.Dock="Top"
+               FontWeight="SemiBold"
+               Text="Stride viewport (spike)" />
+    <TextBox Margin="0,8,0,0"
+             IsReadOnly="True"
+             AcceptsReturn="True"
+             TextWrapping="Wrap"
+             FontFamily="Cascadia Code, Consolas, monospace"
+             FontSize="12"
+             Text="{Binding Viewport.StatusText}" />
+  </DockPanel>
+</UserControl>

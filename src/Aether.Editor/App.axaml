@@ -21,6 +21,9 @@
     <DataTemplate DataType="dockables:ScriptDocumentDock">
       <views:ScriptView DataContext="{Binding Session}" />
     </DataTemplate>
+    <DataTemplate DataType="dockables:ViewportDocument">
+      <views:ViewportView DataContext="{Binding Session}" />
+    </DataTemplate>
     <DataTemplate DataType="dockables:PropertiesTool">
       <views:PropertiesView DataContext="{Binding Session}" />
     </DataTemplate>

@@ -65,6 +65,21 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
+    /// Stride viewport spike document. Shows host status, not a rendered scene.</summary>
+    public sealed class ViewportDocument : Document
+    {
+        public ViewportDocument(EditorSession session)
+        {
+            Session = session;
+            Id = "Viewport";
+            Title = "Viewport";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
     /// C# / Lua script document.</summary>
     public sealed class ScriptDocumentDock : Document
     {

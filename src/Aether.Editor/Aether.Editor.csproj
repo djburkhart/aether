@@ -11,7 +11,7 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Deterministic>true</Deterministic>
-    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, LevelEditor hierarchy, C# / Lua scripts, and property editing.</Description>
+    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, LevelEditor hierarchy, C# / Lua scripts, a Stride viewport probe, and property editing.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Version>0.1.0</Version>
@@ -41,6 +41,7 @@
     <ProjectReference Include="..\Aether.LevelEditor.Core\Aether.LevelEditor.Core.csproj" />
     <ProjectReference Include="..\Aether.Level\Aether.Level.csproj" />
     <ProjectReference Include="..\Aether.Scripting\Aether.Scripting.csproj" />
+    <ProjectReference Include="..\Aether.Stride\Aether.Stride.csproj" />
     <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
     <ProjectReference Include="..\..\samples\plugins\Aether.SamplePlugin\Aether.SamplePlugin.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>

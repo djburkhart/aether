@@ -279,7 +279,8 @@ namespace Aether.Editor
                 "ATF types still use MEF internally.\n" +
                 "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +
                 "Script editor: AvaloniaEdit. " +
-                "Circuit graph and timeline: custom Avalonia canvases (ATF pin-index wires / float start+length intervals).";
+                "Circuit graph and timeline: custom Avalonia canvases (ATF pin-index wires / float start+length intervals). " +
+                "Viewport: Stride.Engine host probe (Game + GameContextHeadless). In-pane present is not available — stride3d/stride#2741 is still open.";
 
             if (session == null || session.LoadedPlugins.Count == 0)
                 return text + "\n\nNo host plugins loaded.";
