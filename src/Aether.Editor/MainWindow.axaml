@@ -25,6 +25,20 @@
                   Click="OnRedo"
                   IsEnabled="{Binding CanRedo}" />
       </MenuItem>
+      <MenuItem Header="_Game">
+        <MenuItem Header="_Play"
+                  InputGesture="F5"
+                  Click="OnPlay"
+                  IsEnabled="{Binding Level.CanPlay}" />
+        <MenuItem Header="P_ause"
+                  InputGesture="F6"
+                  Click="OnPause"
+                  IsEnabled="{Binding Level.CanPause}" />
+        <MenuItem Header="_Stop"
+                  InputGesture="Shift+F5"
+                  Click="OnStop"
+                  IsEnabled="{Binding Level.CanStop}" />
+      </MenuItem>
       <MenuItem Header="_Help">
         <MenuItem Header="_About Aether" Click="OnAbout" />
       </MenuItem>

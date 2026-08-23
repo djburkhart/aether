@@ -108,6 +108,36 @@ namespace Aether.Editor
                 session.Redo();
                 e.Handled = true;
             }
+            else if (!ctrl && shift && e.Key == Key.F5)
+            {
+                session.Level.Stop();
+                e.Handled = true;
+            }
+            else if (!ctrl && !shift && e.Key == Key.F5)
+            {
+                session.Level.Play();
+                e.Handled = true;
+            }
+            else if (!ctrl && !shift && e.Key == Key.F6)
+            {
+                session.Level.Pause();
+                e.Handled = true;
+            }
+        }
+
+        private void OnPlay(object? sender, RoutedEventArgs e)
+        {
+            (DataContext as EditorSession)?.Level.Play();
+        }
+
+        private void OnPause(object? sender, RoutedEventArgs e)
+        {
+            (DataContext as EditorSession)?.Level.Pause();
+        }
+
+        private void OnStop(object? sender, RoutedEventArgs e)
+        {
+            (DataContext as EditorSession)?.Level.Stop();
         }
 
         private void OnNew(object? sender, RoutedEventArgs e)

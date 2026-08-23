@@ -68,7 +68,9 @@ namespace Aether.Editor.Views
         /// Camera: right-drag or alt-left orbits; middle-drag or shift-right
         /// pans. Left-click: current-mode gizmo starts a History drag,
         /// otherwise CPU-pick. W / E / R switch translate / rotate / scale.
-        /// A miss clears selection. Never throws.</summary>
+        /// F5 / F6 / Shift+F5 Play / Pause / Stop. Gizmos and pick-to-move
+        /// are disabled while Playing or Paused. A miss clears selection.
+        /// Never throws.</summary>
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             try
@@ -91,6 +93,8 @@ namespace Aether.Editor.Views
                     return;
                 }
                 if (!props.IsLeftButtonPressed)
+                    return;
+                if (!session.Level.EditingToolsEnabled)
                     return;
 
                 ViewportPresenter? presenter = session.Viewport.Presenter;
@@ -222,7 +226,27 @@ namespace Aether.Editor.Views
             {
                 if (DataContext is not EditorSession session)
                     return;
+                if (e.Key == Key.F5 && e.KeyModifiers == KeyModifiers.Shift)
+                {
+                    session.Level.Stop();
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.F5 && e.KeyModifiers == KeyModifiers.None)
+                {
+                    session.Level.Play();
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.F6 && e.KeyModifiers == KeyModifiers.None)
+                {
+                    session.Level.Pause();
+                    e.Handled = true;
+                    return;
+                }
                 if (e.KeyModifiers != KeyModifiers.None)
+                    return;
+                if (!session.Level.EditingToolsEnabled)
                     return;
                 if (e.Key == Key.W)
                 {
@@ -245,9 +269,27 @@ namespace Aether.Editor.Views
             }
         }
 
-        private void OnGizmoTranslate(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnPlay(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (DataContext is EditorSession session)
+                session.Level.Play();
+        }
+
+        private void OnPause(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session)
+                session.Level.Pause();
+        }
+
+        private void OnStop(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session)
+                session.Level.Stop();
+        }
+
+        private void OnGizmoTranslate(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session && session.Level.EditingToolsEnabled)
                 session.Level.SetGizmoMode(GizmoMode.Translate);
         }
 
