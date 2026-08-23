@@ -280,8 +280,8 @@ namespace Aether.Editor
                 "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +
                 "Script editor: AvaloniaEdit. " +
                 "Circuit graph and timeline: custom Avalonia canvases (ATF pin-index wires / float start+length intervals). " +
-                "Viewport is the center document and presents live software frames (rotating cube). " +
-                "Stride GPU readback is used when a device exists; this host typically has no Vulkan. #2741 is still open.";
+                "Viewport is the center document. It presents Stride GPU frames (offscreen RTT → WriteableBitmap) when a device exists, " +
+                "otherwise a software rotating cube. ubuntu CI has no Vulkan. #2741 is still open.";
 
             if (session == null || session.LoadedPlugins.Count == 0)
                 return text + "\n\nNo host plugins loaded.";

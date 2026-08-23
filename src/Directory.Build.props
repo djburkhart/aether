@@ -1,0 +1,10 @@
+<Project>
+  <!-- Stride picks Graphics.dll (Vulkan vs D3D11) from StridePlatform.
+       The editor host copies that DLL; without this it defaults to Direct3D11
+       and GraphicsAdapterFactory NREs inside DXGI.GetApi on Linux. -->
+  <PropertyGroup>
+    <StridePlatform Condition="'$(StridePlatform)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">Windows</StridePlatform>
+    <StridePlatform Condition="'$(StridePlatform)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">Linux</StridePlatform>
+    <StridePlatform Condition="'$(StridePlatform)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">macOS</StridePlatform>
+  </PropertyGroup>
+</Project>

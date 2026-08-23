@@ -96,13 +96,14 @@ namespace Aether.Editor
     }
 
     /// <summary>
-    /// Reserved Stride render-to-texture readback. Returns false until a
-    /// graphics device exists (this Linux CI host fails Vulkan).</summary>
+    /// Stride render-to-texture readback. Delegates to the long-lived
+    /// <see cref="Aether.Stride.StrideRttPresenter"/>. Returns false when
+    /// no graphics device exists (ubuntu CI / no Vulkan).</summary>
     internal static class StrideGpuFrameSource
     {
         public static bool TryRender(byte[] pixels, int width, int height, double seconds)
         {
-            return false;
+            return Aether.Stride.StrideRttPresenter.TryRender(pixels, width, height, seconds);
         }
     }
 

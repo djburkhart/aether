@@ -10,7 +10,7 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia DCC layout (center Viewport, tools around it), UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, LevelEditor object hierarchy, C# / Lua Script pane, live Viewport presenter, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. The Viewport presents live software frames; Stride GPU present is still blocked (#2741 / no Vulkan on CI). See [PORTING.md](PORTING.md).
+Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia DCC layout (center Viewport, tools around it), UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, LevelEditor object hierarchy, C# / Lua Script pane, live Viewport presenter, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. The Viewport presents Stride GPU frames via render-to-texture when a device exists, otherwise a software cube (ubuntu CI has no Vulkan). #2741 is still open. See [PORTING.md](PORTING.md).
 
 Phase 0 (merged): `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen` / `aether-domgen`, and the headless UsingDom sample.
 
@@ -24,7 +24,7 @@ Scripting first slice: `src/Aether.Scripting` hosts C# (Roslyn) and Lua (MoonSha
 
 Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred editor UI is Avalonia. Stride's official Avalonia Game Studio is not ready enough to be our tools host; we build the authoring layer.
 
-Stride viewport: `src/Aether.Stride` references `Stride.Engine` **4.4.0-beta5**. The center Viewport is a live WriteableBitmap presenter (pulsing clear + rotating cube). It will switch to Stride render-to-texture when a graphics device exists. CI Linux has no Vulkan; software present is the live path. `NullGameEngine` remains the LevelEditor data backend. #2741 is still open.
+Stride viewport: `src/Aether.Stride` references `Stride.Engine` **4.4.0-beta5**. The center Viewport copies frames into an Avalonia `WriteableBitmap`. `StrideRttPresenter` creates a long-lived `GraphicsDevice` (no `Game.Run` loop) and reads an offscreen target; ubuntu CI has no Vulkan so the software cube stays live. On Windows with D3D/Vulkan, `--headless-session` should print `viewport path: stride-rtt`. `NullGameEngine` remains the LevelEditor data backend. #2741 is still open (this is not an official Avalonia Game control).
 
 ## License
 

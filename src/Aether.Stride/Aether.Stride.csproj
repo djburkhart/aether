@@ -8,16 +8,19 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
-    <Description>Stride Engine host spike for Aether. Initializes a Game; does not claim in-pane present.</Description>
+    <Description>Stride Engine host for Aether: Game probe plus offscreen RTT presenter.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Copyright>Copyright 2026 Resolvora LLC</Copyright>
     <Version>0.1.0</Version>
-    <StridePlatform>Linux</StridePlatform>
+    <StridePlatform Condition="$([MSBuild]::IsOSPlatform('Windows'))">Windows</StridePlatform>
+    <StridePlatform Condition="$([MSBuild]::IsOSPlatform('Linux'))">Linux</StridePlatform>
+    <StridePlatform Condition="$([MSBuild]::IsOSPlatform('OSX'))">macOS</StridePlatform>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.4.0-beta5" />
+    <PackageReference Include="Stride.Shaders.Compilers" Version="4.4.0-beta5" />
   </ItemGroup>
 
 </Project>
