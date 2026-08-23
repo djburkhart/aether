@@ -94,53 +94,48 @@ namespace Aether.Stride
         private static StrideRttPresenter Create(out string reason)
         {
             reason = null;
+            string step = "start";
             try
             {
+                step = "adapter-initialize";
                 GraphicsAdapterFactory.Initialize();
+                step = "device-new";
+                GraphicsDevice device = GraphicsDevice.New(DeviceCreationFlags.None, GraphicsProfile.Level_11_0);
+                if (device == null)
+                {
+                    reason = "GraphicsDevice.New returned null.";
+                    return null;
+                }
+
+                step = "graphics-context";
+                var presenter = new StrideRttPresenter
+                {
+                    m_device = device,
+                    m_renderer = device.RendererName ?? GraphicsDevice.Platform.ToString(),
+                    m_context = new GraphicsContext(device)
+                };
+
+                try
+                {
+                    step = "compile-lit-cube";
+                    presenter.m_effect = CompileLitCube(device, presenter.m_context);
+                    step = "cube-mesh";
+                    if (presenter.m_effect != null)
+                        presenter.m_cube = GeometricPrimitive.Cube.New(device, 1.15f, 1f, 1f, false);
+                }
+                catch (Exception ex)
+                {
+                    presenter.m_shaderError = Flatten(ex);
+                }
+
+                return presenter;
             }
             catch (Exception ex)
             {
-                reason = Classify(ex);
+                reason = Classify(ex) + " [" + step + "]";
+                Console.WriteLine("stride-rtt exception: " + ex);
                 return null;
             }
-
-            GraphicsDevice device;
-            try
-            {
-                device = GraphicsDevice.New(DeviceCreationFlags.None, GraphicsProfile.Level_11_0);
-            }
-            catch (Exception ex)
-            {
-                reason = Classify(ex);
-                return null;
-            }
-
-            if (device == null)
-            {
-                reason = "GraphicsDevice.New returned null.";
-                return null;
-            }
-
-            var presenter = new StrideRttPresenter
-            {
-                m_device = device,
-                m_renderer = device.RendererName ?? GraphicsDevice.Platform.ToString(),
-                m_context = new GraphicsContext(device)
-            };
-
-            try
-            {
-                presenter.m_effect = CompileLitCube(device, presenter.m_context);
-                if (presenter.m_effect != null)
-                    presenter.m_cube = GeometricPrimitive.Cube.New(device, 1.15f, 1f, 1f, false);
-            }
-            catch (Exception ex)
-            {
-                // Device exists; keep a GPU clear so the path is still stride-rtt.
-                presenter.m_shaderError = Flatten(ex);
-            }
-
-            return presenter;
         }
 
         private bool Render(byte[] pixels, int width, int height, double seconds)
@@ -273,11 +268,18 @@ namespace Aether.Stride
             return instance;
         }
 
+        private static bool LooksLikeMissingGpu(Exception ex)
+        {
+            string full = ex == null ? string.Empty : Flatten(ex) + Environment.NewLine + ex;
+            return full.IndexOf("vulkan", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                full.IndexOf("ErrorIncompatibleDriver", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                full.IndexOf("DXGI.GetApi", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private static string Classify(Exception ex)
         {
             string text = Flatten(ex);
-            if (text.IndexOf("vulkan", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("ErrorIncompatibleDriver", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (LooksLikeMissingGpu(ex))
             {
                 return "Vulkan instance/device creation failed (no usable GPU/driver). " +
                     "ubuntu CI is expected to stay on software-writeablebitmap. " + text;

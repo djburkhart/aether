@@ -9,9 +9,11 @@ namespace Aether.Editor
     {
         public ViewportSession()
         {
-            Result = StrideHost.Probe();
+            // Attempt RTT first so GraphicsAdapterFactory is still clean.
+            // Probe() runs Game.Run and can leave the factory half-initialized.
             Presenter = new ViewportPresenter();
             Presenter.Tick(0);
+            Result = StrideHost.Probe();
         }
 
         public StrideHostResult Result { get; }
