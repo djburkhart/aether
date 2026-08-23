@@ -49,6 +49,7 @@ namespace Aether.Editor
             Level.PropertyChanged += OnLevelPropertyChanged;
             Script = new ScriptSession(() => Game, () => History);
             Script.Ran += OnScriptRan;
+            Script.Paused += OnScriptPaused;
             New();
         }
 
@@ -439,7 +440,20 @@ namespace Aether.Editor
 
         public ScriptResult RunScript()
         {
-            return Script.Run();
+            Script.BeginRun();
+            return ScriptResult.Ok("started");
+        }
+
+        public void ContinueScript()
+        {
+            Script.Continue();
+        }
+
+        private void OnScriptPaused(object? sender, EventArgs e)
+        {
+            RefreshPropertyTarget();
+            NotifyHistoryCommands();
+            NotifyFileState();
         }
 
         private void OnScriptRan(object? sender, EventArgs e)

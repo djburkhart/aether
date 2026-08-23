@@ -6,8 +6,8 @@ using Microsoft.CodeAnalysis.Scripting;
 namespace Aether.Scripting
 {
     /// <summary>
-    /// C# via Roslyn scripting. The sample globals are <see cref="ScriptGlobals"/>
-    /// only — this is not a security sandbox; it is the in-editor host API.</summary>
+    /// C# via Roslyn scripting. Statement boundaries get an injected
+    /// <c>__line(n)</c> hook so breakpoints pause before the statement.</summary>
     public sealed class CSharpScriptLanguage : IScriptLanguage
     {
         public string Id
@@ -25,22 +25,25 @@ namespace Aether.Scripting
             get { return ".csx"; }
         }
 
-        public ScriptResult Run(string source, ScriptDocument document)
+        public ScriptResult Run(string source, ScriptRunContext context)
         {
-            if (document == null)
+            if (context == null)
+                throw new ArgumentNullException("context");
+            if (context.Document == null)
                 throw new ArgumentNullException("document");
             if (string.IsNullOrWhiteSpace(source))
                 return ScriptResult.Fail("C# source is empty.");
 
-            var globals = new ScriptGlobals(document);
+            string rewritten = CSharpLineHooks.Inject(source);
+            var globals = new ScriptGlobals(context.Document, context.Breaks, context.Path);
             ScriptOptions options = ScriptOptions.Default
                 .WithReferences(typeof(ScriptDocument).Assembly)
                 .WithImports("System");
 
             try
             {
-                CSharpScript.RunAsync(source, options, globals).GetAwaiter().GetResult();
-                return ScriptResult.Ok(document.Output);
+                CSharpScript.RunAsync(rewritten, options, globals).GetAwaiter().GetResult();
+                return ScriptResult.Ok(context.Document.Output);
             }
             catch (CompilationErrorException ex)
             {

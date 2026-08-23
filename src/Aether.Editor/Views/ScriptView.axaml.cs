@@ -20,15 +20,26 @@ namespace Aether.Editor.Views
         private void OnDataContextChanged(object? sender, System.EventArgs e)
         {
             if (m_session != null)
+            {
                 m_session.Script.PropertyChanged -= OnScriptPropertyChanged;
+                m_session.Script.Debugger.BreakpointsChanged -= OnBreakpointsChanged;
+            }
 
             m_session = DataContext as EditorSession;
             if (m_session == null)
                 return;
 
+            if (m_gutter == null)
+            {
+                m_gutter = new BreakpointMargin(Editor, m_session.Script);
+                Editor.TextArea.LeftMargins.Insert(0, m_gutter);
+            }
+
             m_session.Script.PropertyChanged += OnScriptPropertyChanged;
+            m_session.Script.Debugger.BreakpointsChanged += OnBreakpointsChanged;
             PushSourceToEditor();
             SelectLanguageItem(m_session.Script.LanguageId);
+            m_gutter?.Refresh();
         }
 
         private void OnScriptPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -37,6 +48,13 @@ namespace Aether.Editor.Views
                 PushSourceToEditor();
             if (e.PropertyName == nameof(ScriptSession.LanguageId))
                 SelectLanguageItem(m_session!.Script.LanguageId);
+            if (e.PropertyName is nameof(ScriptSession.IsPaused) or nameof(ScriptSession.WatchText))
+                m_gutter?.Refresh();
+        }
+
+        private void OnBreakpointsChanged(object? sender, System.EventArgs e)
+        {
+            m_gutter?.Refresh();
         }
 
         private void OnEditorTextChanged(object? sender, System.EventArgs e)
@@ -49,6 +67,11 @@ namespace Aether.Editor.Views
         private void OnRun(object? sender, RoutedEventArgs e)
         {
             m_session?.RunScript();
+        }
+
+        private void OnContinue(object? sender, RoutedEventArgs e)
+        {
+            m_session?.ContinueScript();
         }
 
         private void OnLanguageChanged(object? sender, SelectionChangedEventArgs e)
@@ -84,6 +107,7 @@ namespace Aether.Editor.Views
         }
 
         private EditorSession? m_session;
+        private BreakpointMargin? m_gutter;
         private bool m_pushing;
     }
 }

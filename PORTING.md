@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, then C# and Lua scripts against UsingDom). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts against UsingDom, then pause/continue on a breakpoint before Bill Size changes). Windows CI is not required; no Windows-only API remains in the compiled set.
 
 ---
 
@@ -695,13 +695,24 @@ C# is **not** a security sandbox. Roslyn can fully-qualify any referenced API. T
 
 ## Cut line
 
-**Built:** `IScriptLanguage` / `IScriptHost` / `IDebugger`. `CSharpScriptLanguage` (Roslyn `CSharpScript.RunAsync`). `LuaScriptLanguage` (MoonSharp). `ScriptDocument` safe API: `ListObjects`, `GetAttribute`, `SetAttribute`, `Log`. Script dock pane (AvaloniaEdit) with language combo, Run, and output. File Open of `.csx` / `.lua` loads that pane.
+**Built:** `IScriptLanguage` / `IScriptHost` / `IDebugger`. `CSharpScriptLanguage` (Roslyn `CSharpScript.RunAsync` + statement-line rewrite). `LuaScriptLanguage` (MoonSharp + host `IDebugger` on `GetAction`). `ScriptDocument` safe API: `ListObjects`, `GetAttribute`, `SetAttribute`, `Log`, `SnapshotWatches`. Script dock pane (AvaloniaEdit) with gutter breakpoints, Run, Continue, and a watch box. File Open of `.csx` / `.lua` loads that pane.
 
-**Not built:** WinForms SLED IDE, syntax-editor control, crash reporter, C++ LibSledDebugger, SCMP target protocol, IronPython (ATF's leftover scripting note), a DAP listen-and-attach server.
+**Not built:** WinForms SLED IDE, syntax-editor control, crash reporter, C++ LibSledDebugger, SCMP target protocol, IronPython (ATF's leftover scripting note), a DAP listen-and-attach server, Visual Studio integration.
 
-## Debugger (deferred)
+## Debugger
 
-`IDebugger` records breakpoints (`SetBreakpoint` / `RemoveBreakpoint` / `ClearBreakpoints` / `Breakpoints`) and exposes `BreakpointHit`. The current run loop **does not stop** and **does not raise** `BreakpointHit`. A DAP server is deferred until there is a run loop that honors breakpoints. That is enough for this slice: Run of C# and Lua is the done bar.
+`IDebugger` records breakpoints and **honors them on Run**. Language hosts call `IStatementBreak.OnStatement` at a statement boundary (before the statement executes). `ScriptDebugger` blocks that run thread on a `ManualResetEventSlim`; `Continue` releases it. The UI starts Run on a worker thread so the dispatcher is not stuck in the wait. Headless does the same: `BeginRun` + `WaitUntilPaused` + inspect + `Continue`.
+
+| Language | Hook |
+|---|---|
+| C# | Roslyn syntax rewrite inserts `__line(n);` before each statement (`n` is the original 1-based line). |
+| Lua | MoonSharp `AttachDebugger`. `IsPauseRequested` is true when debugging; `GetAction` maps `SourceRef.FromLine` to `OnStatement`. |
+
+Watches while paused are `ScriptDocument.SnapshotWatches()` (named objects + attributes) plus language and line. Locals from the Roslyn/MoonSharp frames are not dumped in this slice.
+
+A DAP server is still deferred. Pause/continue does not need one.
+
+The Script pane gutter (left of line numbers) toggles a breakpoint. Headless uses `IDebugger.SetBreakpoint(path, line)` with no GUI.
 
 ## Editor surface
 
@@ -734,7 +745,8 @@ void Log(string message)
 2. Run `testdata/scripts/resize-bill.csx`, assert Bill Size == 14
 3. `session.New()` again
 4. Run `testdata/scripts/resize-bill.lua`, assert Bill Size == 14
-5. Record one `IDebugger` breakpoint (list only; Run does not stop)
+5. Set a breakpoint on line 2 of `resize-bill.csx`, `BeginRun`, assert paused and Bill Size still 12, Continue, assert Size 14
+6. Same pause/continue proof for `resize-bill.lua`
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

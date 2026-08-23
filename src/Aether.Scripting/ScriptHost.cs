@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Aether.Scripting
 {
     /// <summary>
-    /// Default host: C# (Roslyn) + Lua (MoonSharp) and a no-op debugger hook.</summary>
+    /// Default host: C# (Roslyn) + Lua (MoonSharp) and a wait-handle debugger.</summary>
     public sealed class ScriptHost : IScriptHost
     {
         public ScriptHost()
@@ -37,12 +37,26 @@ namespace Aether.Scripting
             return null;
         }
 
-        public ScriptResult Run(string languageId, string source, ScriptDocument document)
+        public ScriptResult Run(string languageId, string source, ScriptDocument document, string path)
         {
             IScriptLanguage language = FindLanguage(languageId);
             if (language == null)
                 return ScriptResult.Fail("Unknown script language: " + languageId);
-            return language.Run(source, document);
+
+            var breaks = Debugger as IStatementBreak;
+            if (breaks == null)
+                return ScriptResult.Fail("Debugger does not support statement breaks.");
+
+            breaks.BeginSession();
+            try
+            {
+                var context = new ScriptRunContext(document, path, Debugger, breaks);
+                return language.Run(source, context);
+            }
+            finally
+            {
+                breaks.EndSession();
+            }
         }
 
         private readonly List<IScriptLanguage> m_languages = new List<IScriptLanguage>();

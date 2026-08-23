@@ -83,6 +83,26 @@ namespace Aether.Scripting
             get { return m_log.ToString(); }
         }
 
+        /// <summary>
+        /// Named objects and their attributes — the watch list while paused.
+        /// This is the same surface scripts can read through GetAttribute.</summary>
+        public IReadOnlyList<WatchValue> SnapshotWatches()
+        {
+            var watches = new List<WatchValue>();
+            foreach (DomNode node in Walk(m_root))
+            {
+                string name = GetName(node);
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                foreach (AttributeInfo attr in node.Type.Attributes)
+                {
+                    object value = node.GetAttribute(attr);
+                    watches.Add(new WatchValue(name + "." + attr.Name, Format(value)));
+                }
+            }
+            return watches;
+        }
+
         private DomNode Find(string objectName)
         {
             if (string.IsNullOrEmpty(objectName))

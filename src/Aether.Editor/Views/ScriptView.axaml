@@ -5,8 +5,14 @@
   <DockPanel Margin="8">
     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
       <Button DockPanel.Dock="Right"
+              Content="Continue"
+              IsEnabled="{Binding Script.CanContinue}"
+              Click="OnContinue"
+              Margin="0,0,0,0" />
+      <Button DockPanel.Dock="Right"
               Content="Run"
-              Click="OnRun" />
+              Click="OnRun"
+              Margin="0,0,8,0" />
       <ComboBox x:Name="LanguageBox"
                 DockPanel.Dock="Right"
                 Width="90"
@@ -21,12 +27,21 @@
                  TextTrimming="CharacterEllipsis" />
     </DockPanel>
     <TextBox DockPanel.Dock="Bottom"
-             Height="96"
+             Height="72"
              Margin="0,8,0,0"
              IsReadOnly="True"
              AcceptsReturn="True"
              TextWrapping="Wrap"
              Text="{Binding Script.Output}" />
+    <TextBox DockPanel.Dock="Bottom"
+             Height="88"
+             Margin="0,8,0,0"
+             IsReadOnly="True"
+             AcceptsReturn="True"
+             TextWrapping="Wrap"
+             FontFamily="Cascadia Code, Consolas, monospace"
+             FontSize="12"
+             Text="{Binding Script.WatchText}" />
     <ae:TextEditor x:Name="Editor"
                    FontFamily="Cascadia Code, Consolas, monospace"
                    FontSize="13"
