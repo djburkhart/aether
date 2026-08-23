@@ -17,6 +17,7 @@ using Aether.Plugins;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using Sce.Atf;
 using Sce.Atf.Adaptation;
 using Sce.Atf.Controls.PropertyEditing;
 using Sce.Atf.VectorMath;
