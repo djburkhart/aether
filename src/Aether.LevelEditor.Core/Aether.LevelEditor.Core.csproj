@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>LevelEditorCore</RootNamespace>
+    <AssemblyName>Aether.LevelEditor.Core</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <Copyright>Copyright © 2014 Sony Computer Entertainment America LLC</Copyright>
+    <Company>Sony Computer Entertainment America LLC</Company>
+    <Product>Aether Engine</Product>
+    <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
+    <Description>Portable net10.0 port of SonyWWS LevelEditorCore interfaces, transform helpers, and a no-op game-engine proxy. No native renderer, DX11, or WinForms.</Description>
+    <AssemblyTitle>Aether.LevelEditor.Core</AssemblyTitle>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+  </ItemGroup>
+
+</Project>

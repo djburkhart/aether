@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aether.Editor.Views.LevelView">
+  <DockPanel Margin="8">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <Button DockPanel.Dock="Right"
+              Content="Add GameObject"
+              Click="OnAddGameObject" />
+      <TextBlock Text="Level"
+                 FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+    </DockPanel>
+    <TextBlock DockPanel.Dock="Bottom"
+               Margin="0,8,0,0"
+               Opacity="0.7"
+               Text="{Binding Level.StatusText}" />
+    <TreeView ItemsSource="{Binding Level.Nodes}"
+              SelectedItem="{Binding Level.SelectedNode}">
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate ItemsSource="{Binding Children}">
+          <TextBlock Text="{Binding Display}" />
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

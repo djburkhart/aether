@@ -35,9 +35,15 @@ namespace Aether.Editor
             MimeTypes = new[] { "application/xml", "text/xml" }
         };
 
+        private static readonly FilePickerFileType LevelFiles = new("LevelEditor")
+        {
+            Patterns = new[] { "*.lvl" },
+            MimeTypes = new[] { "application/xml", "text/xml" }
+        };
+
         private static readonly FilePickerFileType Documents = new("Documents")
         {
-            Patterns = new[] { "*.circuit", "*.timeline", "*.xml" },
+            Patterns = new[] { "*.circuit", "*.timeline", "*.lvl", "*.xml" },
             MimeTypes = new[] { "application/xml", "text/xml" }
         };
 
@@ -143,7 +149,7 @@ namespace Aether.Editor
                 {
                     Title = "Open document",
                     AllowMultiple = false,
-                    FileTypeFilter = new[] { Documents, CircuitFiles, TimelineFiles, UsingDomXml }
+                    FileTypeFilter = new[] { Documents, CircuitFiles, TimelineFiles, LevelFiles, UsingDomXml }
                 });
             IStorageFile? file = files.FirstOrDefault();
             if (file == null)
@@ -194,21 +200,24 @@ namespace Aether.Editor
 
             bool circuit = session.ActiveKind == EditorDocumentKind.Circuit;
             bool timeline = session.ActiveKind == EditorDocumentKind.Timeline;
+            bool level = session.ActiveKind == EditorDocumentKind.Level;
             string suggested = session.FilePath != null
                 ? Path.GetFileName(session.FilePath)
-                : (circuit ? "circuit.circuit" : timeline ? "timeline.timeline" : "game.xml");
+                : (circuit ? "circuit.circuit" : timeline ? "timeline.timeline" : level ? "level.lvl" : "game.xml");
 
             IStorageFile? file = await StorageProvider.SaveFilePickerAsync(
                 new FilePickerSaveOptions
                 {
-                    Title = circuit ? "Save circuit document" : timeline ? "Save timeline document" : "Save UsingDom document",
+                    Title = circuit ? "Save circuit document" : timeline ? "Save timeline document" : level ? "Save level document" : "Save UsingDom document",
                     SuggestedFileName = suggested,
-                    DefaultExtension = circuit ? "circuit" : timeline ? "timeline" : "xml",
+                    DefaultExtension = circuit ? "circuit" : timeline ? "timeline" : level ? "lvl" : "xml",
                     FileTypeChoices = circuit
                         ? new[] { CircuitFiles, Documents }
                         : timeline
                             ? new[] { TimelineFiles, Documents }
-                            : new[] { UsingDomXml, Documents },
+                            : level
+                                ? new[] { LevelFiles, Documents }
+                                : new[] { UsingDomXml, Documents },
                     ShowOverwritePrompt = true
                 });
             if (file == null)
@@ -256,7 +265,7 @@ namespace Aether.Editor
                 "The document and property system come from SonyWWS ATF (Apache 2.0), " +
                 "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
                 "Sony and PlayStation names are used only to describe that origin.\n\n" +
-                "Open/Save uses Core DomXmlReader / DomXmlWriter for UsingDom XML, CircuitEditor .circuit, and TimelineEditor .timeline files. " +
+                "Open/Save uses Core DomXmlReader / DomXmlWriter for UsingDom XML, CircuitEditor .circuit, TimelineEditor .timeline, and LevelEditor .lvl files. " +
                 "Host plugins use Microsoft.Extensions.DependencyInjection + AssemblyLoadContext; " +
                 "ATF types still use MEF internally.\n" +
                 "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +

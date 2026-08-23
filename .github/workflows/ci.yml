@@ -44,6 +44,13 @@ jobs:
           testdata/atf/TimelineEditor/Schema.cs
           timeline TimelineEditorSample --check
 
+      - name: LevelEditor DomGen smoke
+        run: >
+          dotnet run --no-build -c Release --project src/Aether.Atf.DomGen.Cli --
+          testdata/atf/LevelEditor/level_editor.xsd
+          testdata/atf/LevelEditor/Schema.cs
+          gap LevelEditor --check
+
       - name: UsingDom sample
         run: dotnet run --no-build -c Release --project samples/UsingDom
 

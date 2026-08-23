@@ -35,6 +35,21 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
+    /// LevelEditor hierarchy document.</summary>
+    public sealed class LevelDocument : Document
+    {
+        public LevelDocument(EditorSession session)
+        {
+            Session = session;
+            Id = "Level";
+            Title = "Level";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
     /// TimelineEditor tracks/intervals document.</summary>
     public sealed class TimelineDocument : Document
     {

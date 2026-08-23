@@ -11,7 +11,7 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Deterministic>true</Deterministic>
-    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, and property editing.</Description>
+    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, LevelEditor hierarchy, and property editing.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Version>0.1.0</Version>
@@ -37,6 +37,8 @@
     <ProjectReference Include="..\Aether.Circuit\Aether.Circuit.csproj" />
     <ProjectReference Include="..\Aether.Atf.Timeline\Aether.Atf.Timeline.csproj" />
     <ProjectReference Include="..\Aether.Timeline\Aether.Timeline.csproj" />
+    <ProjectReference Include="..\Aether.LevelEditor.Core\Aether.LevelEditor.Core.csproj" />
+    <ProjectReference Include="..\Aether.Level\Aether.Level.csproj" />
     <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
     <ProjectReference Include="..\..\samples\plugins\Aether.SamplePlugin\Aether.SamplePlugin.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
@@ -50,6 +52,9 @@
     <Content Include="..\..\testdata\atf\CircuitEditor\Example.circuit" Link="Example.circuit" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\TimelineEditor\timeline.xsd" Link="timeline.xsd" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\TimelineEditor\100.timeline" Link="100.timeline" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\LevelEditor\level_editor.xsd" Link="level_editor.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\LevelEditor\gap.xsd" Link="gap.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\LevelEditor\LightTest.lvl" Link="LightTest.lvl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="PublishSamplePlugin" AfterTargets="Build">
