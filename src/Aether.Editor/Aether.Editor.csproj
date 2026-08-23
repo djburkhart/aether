@@ -11,7 +11,7 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Deterministic>true</Deterministic>
-    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, LevelEditor hierarchy, and property editing.</Description>
+    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, LevelEditor hierarchy, C# / Lua scripts, and property editing.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Version>0.1.0</Version>
@@ -26,6 +26,7 @@
     <PackageReference Include="Dock.Model.Mvvm" Version="12.1.0.4" />
     <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.4" />
     <PackageReference Include="bodong.Avalonia.PropertyGrid" Version="12.0.4.1" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +40,7 @@
     <ProjectReference Include="..\Aether.Timeline\Aether.Timeline.csproj" />
     <ProjectReference Include="..\Aether.LevelEditor.Core\Aether.LevelEditor.Core.csproj" />
     <ProjectReference Include="..\Aether.Level\Aether.Level.csproj" />
+    <ProjectReference Include="..\Aether.Scripting\Aether.Scripting.csproj" />
     <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
     <ProjectReference Include="..\..\samples\plugins\Aether.SamplePlugin\Aether.SamplePlugin.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
@@ -55,6 +57,8 @@
     <Content Include="..\..\testdata\atf\LevelEditor\level_editor.xsd" Link="level_editor.xsd" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\LevelEditor\gap.xsd" Link="gap.xsd" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\LevelEditor\LightTest.lvl" Link="LightTest.lvl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\scripts\resize-bill.csx" Link="resize-bill.csx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\scripts\resize-bill.lua" Link="resize-bill.lua" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="PublishSamplePlugin" AfterTargets="Build">

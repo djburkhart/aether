@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 
 using Aether.Circuit;
 using Aether.Level;
+using Aether.Scripting;
 using Aether.Timeline;
 using Aether.Plugins;
 
@@ -21,8 +22,9 @@ namespace Aether.Editor
 {
     /// <summary>
     /// Session for the Phase 1 shell: UsingDom document, CircuitEditor graph,
-    /// TimelineEditor tracks/intervals, LevelEditor hierarchy, ATF
-    /// selection/property contexts, HistoryContext undo, and DomXml Open/Save.
+    /// TimelineEditor tracks/intervals, LevelEditor hierarchy, C# / Lua
+    /// scripts, ATF selection/property contexts, HistoryContext undo, and
+    /// DomXml Open/Save.
     /// Menus call this directly; StandardFileCommands / IDocumentService are not
     /// the host.</summary>
     public sealed class EditorSession : INotifyPropertyChanged
@@ -45,6 +47,8 @@ namespace Aether.Editor
             Timeline.PropertyChanged += OnTimelinePropertyChanged;
             Level = new LevelSession();
             Level.PropertyChanged += OnLevelPropertyChanged;
+            Script = new ScriptSession(() => Game, () => History);
+            Script.Ran += OnScriptRan;
             New();
         }
 
@@ -71,6 +75,8 @@ namespace Aether.Editor
         public TimelineSession Timeline { get; }
 
         public LevelSession Level { get; }
+
+        public ScriptSession Script { get; }
 
         public EditorDocumentKind ActiveKind
         {
@@ -288,6 +294,11 @@ namespace Aether.Editor
                 ActivateLevel();
                 return;
             }
+            if (ScriptFiles.IsScriptFile(path))
+            {
+                Script.Open(path);
+                return;
+            }
 
             BindDocument(GameDocument.ReadXml(path, Loader), Path.GetFullPath(path));
             m_activeKind = EditorDocumentKind.Game;
@@ -424,6 +435,19 @@ namespace Aether.Editor
         {
             Level.AddGameObject();
             ActivateLevel();
+        }
+
+        public ScriptResult RunScript()
+        {
+            return Script.Run();
+        }
+
+        private void OnScriptRan(object? sender, EventArgs e)
+        {
+            ReloadObjects();
+            RefreshPropertyTarget();
+            NotifyHistoryCommands();
+            NotifyFileState();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

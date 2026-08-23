@@ -65,6 +65,21 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
+    /// C# / Lua script document.</summary>
+    public sealed class ScriptDocumentDock : Document
+    {
+        public ScriptDocumentDock(EditorSession session)
+        {
+            Session = session;
+            Id = "Script";
+            Title = "Script";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
     /// Properties tool pane.</summary>
     public sealed class PropertiesTool : Tool
     {

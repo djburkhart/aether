@@ -5,6 +5,7 @@ using System.Linq;
 
 using Aether.Circuit;
 using Aether.Level;
+using Aether.Scripting;
 using Aether.Timeline;
 using Aether.Plugins;
 
@@ -54,7 +55,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProveLevel(session);
+            code = ProveLevel(session);
+            if (code != 0)
+                return code;
+
+            return ProveScripts(session);
         }
 
         public static int WriteFixture()
@@ -643,6 +648,79 @@ namespace Aether.Editor
 
             Console.WriteLine("headless level ok");
             return 0;
+        }
+
+        private static int ProveScripts(EditorSession session)
+        {
+            string? csharp = ScriptFiles.FindSampleCSharpPath();
+            string? lua = ScriptFiles.FindSampleLuaPath();
+            if (csharp == null || lua == null)
+            {
+                Console.Error.WriteLine("Error: could not find testdata/scripts/resize-bill.csx or .lua");
+                return 90;
+            }
+
+            session.New();
+            Console.WriteLine("csharp fixture: {0}", csharp);
+            ScriptResult cs = session.Script.RunFile(csharp);
+            Console.WriteLine("csharp output: {0}", cs.Output);
+            if (!cs.Succeeded)
+            {
+                Console.Error.WriteLine("Error: C# script failed: {0}", cs.Output);
+                return 91;
+            }
+
+            object? size = BillSize(session);
+            Console.WriteLine("Bill Size after C#: {0}", size);
+            if (!Equals(size, ScriptFiles.ExpectedBillSize))
+            {
+                Console.Error.WriteLine("Error: C# script should set Bill Size to {0}.", ScriptFiles.ExpectedBillSize);
+                return 92;
+            }
+
+            session.New();
+            Console.WriteLine("lua fixture: {0}", lua);
+            ScriptResult luaResult = session.Script.RunFile(lua);
+            Console.WriteLine("lua output: {0}", luaResult.Output);
+            if (!luaResult.Succeeded)
+            {
+                Console.Error.WriteLine("Error: Lua script failed: {0}", luaResult.Output);
+                return 93;
+            }
+
+            object? luaSize = BillSize(session);
+            Console.WriteLine("Bill Size after Lua: {0}", luaSize);
+            if (!Equals(luaSize, ScriptFiles.ExpectedBillSize))
+            {
+                Console.Error.WriteLine("Error: Lua script should set Bill Size to {0}.", ScriptFiles.ExpectedBillSize);
+                return 94;
+            }
+
+            if (session.Script.Debugger.Breakpoints.Count != 0)
+            {
+                Console.Error.WriteLine("Error: debugger should start with no breakpoints.");
+                return 95;
+            }
+
+            session.Script.Debugger.SetBreakpoint(csharp, 2);
+            if (session.Script.Debugger.Breakpoints.Count != 1)
+            {
+                Console.Error.WriteLine("Error: IDebugger.SetBreakpoint did not record the breakpoint.");
+                return 96;
+            }
+
+            Console.WriteLine("headless scripts ok");
+            return 0;
+        }
+
+        private static object? BillSize(EditorSession session)
+        {
+            GameObjectItem? bill = Find(session, "Bill");
+            if (bill == null)
+                return null;
+            session.SelectedObject = bill;
+            PropertyDescriptor? size = FindDescriptor(session, "Size");
+            return size?.GetValue(session.PropertyTarget);
         }
 
         private static GameObjectItem? Find(EditorSession session, string name)
