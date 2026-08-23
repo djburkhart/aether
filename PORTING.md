@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, then C# and Lua scripts against UsingDom). Windows CI is not required; no Windows-only API remains in the compiled set.
 
 ---
 
@@ -651,4 +651,91 @@ File Open detects `.lvl` (or a `game` XML root in namespace `gap`) and routes to
 dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
   testdata/atf/LevelEditor/level_editor.xsd testdata/atf/LevelEditor/Schema.cs \
   gap LevelEditor --check
+```
+
+---
+
+# SLED first slice (in-editor C# + Lua host)
+
+First slice of modernizing SonyWWS SLED into Aether. **In-process** C# and Lua script hosting against a loaded Aether document. Not the WinForms SLED IDE. Not a DAP product. Not a port of C++ LibSledDebugger.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream | https://github.com/SonyWWS/SLED (fork: https://github.com/djburkhart/SLED) |
+| High-reuse idea | Language-plugin split (`tool/SledShared/Plugin/ISledLanguagePlugin.cs`: name + extensions + id) |
+| Also considered | SCMP / target comms, SledShared DOM/plugin/services |
+| Disposable | `tool/SLED` WinForms IDE, `tool/SledSyntaxEditor`, `tool/SledCrashReporter` |
+| Not used | `src/sleddebugger`, `src/sledluaplugin`, `src/sledcore` (C++ LibSledDebugger) |
+| Bundled Lua (not used) | `wws_lua/lua-5.1.4`, `wws_lua/lua-5.2.3` |
+| Destination host | `src/Aether.Scripting` |
+| Destination UI | Script dock document in `src/Aether.Editor` |
+| Fixtures | `testdata/scripts/resize-bill.csx`, `testdata/scripts/resize-bill.lua` |
+| Destination TFM | `net10.0` |
+
+SLED expected a sibling ATF tree. That ATF was **not** vendored. Aether.Atf.Core / Commands / PropertyEditing already on main are the ATF layer.
+
+No SLED source files were copied. New host code is Resolvora/Aether. Sony headers stay on any future SLED-derived files; this slice has none.
+
+## Hypothesis
+
+MoonSharp + Roslyn Scripting API + a small `IScriptHost` is the SLED idea without the C++ target. **Verified.** The host is in-process; scripts bind a `ScriptDocument` over the loaded UsingDom `DomNode` (+ `HistoryContext`). LibSledDebugger / SCMP is not required for Run.
+
+## MoonSharp vs NLua
+
+| Engine | Why |
+|---|---|
+| **MoonSharp 2.0.0** (chosen) | Pure C#, restores on net10.0, no native Lua / C++ build. `CoreModules.Preset_HardSandbox` (no `os` / `io`). |
+| NLua | Needs a native lua54 binary. Rejected for this slice so CI stays `dotnet build` only. |
+
+SLED bundled Lua 5.1.4 / 5.2.3 for an in-game C++ target. Aether hosts Lua in-process instead.
+
+C# is **not** a security sandbox. Roslyn can fully-qualify any referenced API. The sample globals are only `document` and `log`; the checked-in scripts do not import process/file APIs. Lua is HardSandbox.
+
+## Cut line
+
+**Built:** `IScriptLanguage` / `IScriptHost` / `IDebugger`. `CSharpScriptLanguage` (Roslyn `CSharpScript.RunAsync`). `LuaScriptLanguage` (MoonSharp). `ScriptDocument` safe API: `ListObjects`, `GetAttribute`, `SetAttribute`, `Log`. Script dock pane (AvaloniaEdit) with language combo, Run, and output. File Open of `.csx` / `.lua` loads that pane.
+
+**Not built:** WinForms SLED IDE, syntax-editor control, crash reporter, C++ LibSledDebugger, SCMP target protocol, IronPython (ATF's leftover scripting note), a DAP listen-and-attach server.
+
+## Debugger (deferred)
+
+`IDebugger` records breakpoints (`SetBreakpoint` / `RemoveBreakpoint` / `ClearBreakpoints` / `Breakpoints`) and exposes `BreakpointHit`. The current run loop **does not stop** and **does not raise** `BreakpointHit`. A DAP server is deferred until there is a run loop that honors breakpoints. That is enough for this slice: Run of C# and Lua is the done bar.
+
+## Editor surface
+
+Picked a **Script dock document** (tab alongside Objects / Circuit / Timeline / Level), not a fifth `EditorDocumentKind`.
+
+- File Open of `.csx` / `.lua` loads source into the Script pane and does **not** change `ActiveKind`.
+- File Save still applies to the last-activated UsingDom / circuit / timeline / level document.
+- Run executes against the loaded UsingDom `Game` + its `HistoryContext` (the same walk works for Level GameObjects if a later slice binds that root).
+
+The pane uses AvaloniaEdit (`Avalonia.AvaloniaEdit` 12.0.0). A TextBox would have been enough; AvaloniaEdit fit.
+
+## Safe API
+
+Scripts see `document` (and C# `log(string)`):
+
+```
+string[] ListObjects()
+object GetAttribute(string objectName, string attributeName)
+void SetAttribute(string objectName, string attributeName, object value)
+void Log(string message)
+```
+
+`SetAttribute` converts the value to the attribute's current CLR type (Lua numbers arrive as `double`) and wraps the write in `HistoryContext.DoTransaction` when a history context is bound. Attribute names are schema names (`size`, not the property-grid display name `Size`). The API does not expose process, file, or network operations.
+
+## Headless proof
+
+`--headless-session` still proves UsingDom / plugins / Circuit / Timeline / Level, then:
+
+1. `session.New()` (Ogre Adventure II, Bill Size 12)
+2. Run `testdata/scripts/resize-bill.csx`, assert Bill Size == 14
+3. `session.New()` again
+4. Run `testdata/scripts/resize-bill.lua`, assert Bill Size == 14
+5. Record one `IDebugger` breakpoint (list only; Run does not stop)
+
+```bash
+dotnet run -c Release --project src/Aether.Editor -- --headless-session
 ```

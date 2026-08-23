@@ -44,8 +44,11 @@ GameEngineProxy types. `src/Aether.Level` retargets LevelEditor
 `DomNodeAdapters` and schema loader. `testdata/atf/LevelEditor` is the
 LevelEditor `level_editor.xsd` / `gap.xsd`, aether-domgen Schema.cs, and
 `LightTest.lvl` fixture. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
-code; they are not Sony products. Sony and PlayStation names appear only
-in About / NOTICE to describe ATF origin. Host plugins use
+code; they are not Sony products. `src/Aether.Scripting` is new Aether
+in-process script hosting (Roslyn + MoonSharp). It is not a port of the
+SLED WinForms IDE or C++ LibSledDebugger; SLED is named only as the
+heritage of the language-plugin idea. Sony and PlayStation names appear
+only in About / NOTICE to describe ATF / SLED origin. Host plugins use
 Microsoft.Extensions.DependencyInjection. ATF Core / Commands /
 PropertyEditing still use System.ComponentModel.Composition.
 See PORTING.md for the portable subset and cuts.
@@ -54,6 +57,11 @@ Third-party UI (MIT), referenced from `src/Aether.Editor`:
 - Avalonia: https://github.com/AvaloniaUI/Avalonia
 - Dock (Dock.Avalonia): https://github.com/wieslawsoltes/Dock
 - Avalonia.PropertyGrid: https://github.com/bodong1987/Avalonia.PropertyGrid
+- AvaloniaEdit: https://github.com/AvaloniaUI/AvaloniaEdit
+
+Third-party scripting, referenced from `src/Aether.Scripting`:
+- MoonSharp (BSD-3-Clause): https://github.com/moonsharp-devs/moonsharp
+- Microsoft.CodeAnalysis.CSharp.Scripting (MIT): https://github.com/dotnet/roslyn
 
 Stride Engine (MIT), used as the preferred runtime foundation:
 https://github.com/stride3d/stride

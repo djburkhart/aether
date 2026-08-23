@@ -41,10 +41,16 @@ namespace Aether.Editor
             MimeTypes = new[] { "application/xml", "text/xml" }
         };
 
+        private static readonly FilePickerFileType ScriptFilesFilter = new("Scripts")
+        {
+            Patterns = new[] { "*.csx", "*.lua" },
+            MimeTypes = new[] { "text/plain" }
+        };
+
         private static readonly FilePickerFileType Documents = new("Documents")
         {
-            Patterns = new[] { "*.circuit", "*.timeline", "*.lvl", "*.xml" },
-            MimeTypes = new[] { "application/xml", "text/xml" }
+            Patterns = new[] { "*.circuit", "*.timeline", "*.lvl", "*.xml", "*.csx", "*.lua" },
+            MimeTypes = new[] { "application/xml", "text/xml", "text/plain" }
         };
 
         public MainWindow()
@@ -149,7 +155,7 @@ namespace Aether.Editor
                 {
                     Title = "Open document",
                     AllowMultiple = false,
-                    FileTypeFilter = new[] { Documents, CircuitFiles, TimelineFiles, LevelFiles, UsingDomXml }
+                    FileTypeFilter = new[] { Documents, CircuitFiles, TimelineFiles, LevelFiles, ScriptFilesFilter, UsingDomXml }
                 });
             IStorageFile? file = files.FirstOrDefault();
             if (file == null)
@@ -266,9 +272,11 @@ namespace Aether.Editor
                 "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
                 "Sony and PlayStation names are used only to describe that origin.\n\n" +
                 "Open/Save uses Core DomXmlReader / DomXmlWriter for UsingDom XML, CircuitEditor .circuit, TimelineEditor .timeline, and LevelEditor .lvl files. " +
+                "File Open of .csx / .lua loads the Script pane (C# via Roslyn, Lua via MoonSharp). File Save still applies to the last-activated document. " +
                 "Host plugins use Microsoft.Extensions.DependencyInjection + AssemblyLoadContext; " +
                 "ATF types still use MEF internally.\n" +
                 "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +
+                "Script editor: AvaloniaEdit. " +
                 "Circuit graph and timeline: custom Avalonia canvases (ATF pin-index wires / float start+length intervals).";
 
             if (session == null || session.LoadedPlugins.Count == 0)
