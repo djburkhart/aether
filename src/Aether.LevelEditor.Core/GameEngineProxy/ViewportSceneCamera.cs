@@ -1,7 +1,7 @@
 // Copyright 2026 Resolvora LLC / Aether Engine contributors.
-// CPU camera + pick used by the Viewport. Matches StrideRttPresenter
-// LookAtRH / PerspectiveFovRH framing so a click (or headless pixel/NDC)
-// hits the same placeholder cubes the GPU path draws. No GraphicsDevice.
+// CPU camera + pick used by the Viewport. Reads the shared ViewportCamera
+// (yaw / pitch / distance / target) so LookAtRH / PerspectiveFovRH match
+// StrideRttPresenter and the translate gizmo. No GraphicsDevice.
 
 using System;
 using System.Collections.Generic;
@@ -35,10 +35,22 @@ namespace LevelEditorCore
     }
 
     /// <summary>
-    /// Shared placeholder camera and CPU pick. The RTT presenter uses the
-    /// same framing constants; this class never touches a GPU API.</summary>
+    /// Shared placeholder camera and CPU pick. The RTT presenter and
+    /// translate gizmo read <see cref="Current"/>; this class never touches
+    /// a GPU API.</summary>
     public static class ViewportSceneCamera
     {
+        /// <summary>
+        /// The one editable Viewport camera. Pick, gizmo hit-tests, software
+        /// overlay, and Stride RTT all call <see cref="CurrentFrame"/>.</summary>
+        public static ViewportCamera Current { get; } = new ViewportCamera();
+
+        /// <summary>LookAt / clip planes from <see cref="Current"/>.</summary>
+        public static ViewportCameraFrame CurrentFrame
+        {
+            get { return Current.ToFrame(); }
+        }
+
         /// <summary>Stride <c>GeometricPrimitive.Cube.New(..., 1.15f)</c>.</summary>
         public const float CubeSize = 1.15f;
 
@@ -273,14 +285,12 @@ namespace LevelEditorCore
 
         public static BoundSceneObject PickAtPixel(BoundLevelScene scene, float pixelX, float pixelY, int width, int height)
         {
-            ViewportCameraFrame frame = ComputeFrame(scene);
-            return Pick(scene, RayFromPixel(frame, pixelX, pixelY, width, height));
+            return Pick(scene, RayFromPixel(CurrentFrame, pixelX, pixelY, width, height));
         }
 
         public static BoundSceneObject PickAtNdc(BoundLevelScene scene, float ndcX, float ndcY, float aspect)
         {
-            ViewportCameraFrame frame = ComputeFrame(scene);
-            return Pick(scene, RayFromNdc(frame, ndcX, ndcY, aspect));
+            return Pick(scene, RayFromNdc(CurrentFrame, ndcX, ndcY, aspect));
         }
 
         /// <summary>

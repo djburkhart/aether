@@ -90,8 +90,8 @@ namespace LevelEditorCore
 
         /// <summary>
         /// Nearest placeholder under an image-space pixel. Uses
-        /// <see cref="ViewportSceneCamera"/> (same LookAt/perspective as RTT).
-        /// Null when the ray misses every cube AABB.</summary>
+        /// <see cref="ViewportSceneCamera.Current"/> (same LookAt/perspective
+        /// as RTT). Null when the ray misses every cube AABB.</summary>
         public BoundSceneObject PickAt(float pixelX, float pixelY, int width, int height)
         {
             return ViewportSceneCamera.PickAtPixel(this, pixelX, pixelY, width, height);

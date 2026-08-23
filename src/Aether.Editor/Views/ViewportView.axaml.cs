@@ -17,6 +17,7 @@ namespace Aether.Editor.Views
         public ViewportView()
         {
             InitializeComponent();
+            Focusable = true;
             AttachedToVisualTree += OnAttached;
             DetachedFromVisualTree += OnDetached;
             SizeChanged += OnSizeChanged;
@@ -24,6 +25,7 @@ namespace Aether.Editor.Views
             PointerMoved += OnPointerMoved;
             PointerReleased += OnPointerReleased;
             PointerCaptureLost += OnPointerCaptureLost;
+            PointerWheelChanged += OnPointerWheelChanged;
         }
 
         private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -62,18 +64,33 @@ namespace Aether.Editor.Views
         }
 
         /// <summary>
-        /// Left-click the Image: if a GameObject is selected and the click
-        /// hits a translate-gizmo axis, start a History drag. Otherwise
-        /// CPU-pick the nearest Level placeholder. A miss clears selection.
-        /// Never throws.</summary>
+        /// Camera: right-drag or alt-left orbits; middle-drag or shift-right
+        /// pans. Left-click: gizmo axis starts a History drag, otherwise
+        /// CPU-pick. A miss clears selection. Never throws.</summary>
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             try
             {
-                if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-                    return;
                 if (DataContext is not EditorSession session)
                     return;
+                PointerPointProperties props = e.GetCurrentPoint(this).Properties;
+                KeyModifiers mods = e.KeyModifiers;
+                bool alt = (mods & KeyModifiers.Alt) != 0;
+                bool shift = (mods & KeyModifiers.Shift) != 0;
+
+                if (props.IsMiddleButtonPressed || (props.IsRightButtonPressed && shift))
+                {
+                    BeginCameraDrag(CameraDragKind.Pan, e);
+                    return;
+                }
+                if (props.IsRightButtonPressed || (props.IsLeftButtonPressed && alt))
+                {
+                    BeginCameraDrag(CameraDragKind.Orbit, e);
+                    return;
+                }
+                if (!props.IsLeftButtonPressed)
+                    return;
+
                 ViewportPresenter? presenter = session.Viewport.Presenter;
                 if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
                     return;
@@ -85,6 +102,7 @@ namespace Aether.Editor.Views
                 if (axis.HasValue &&
                     session.Level.BeginAxisDrag(axis.Value, pixelX, pixelY, presenter.Width, presenter.Height))
                 {
+                    m_drag = CameraDragKind.Gizmo;
                     e.Pointer.Capture(this);
                     e.Handled = true;
                     return;
@@ -102,7 +120,31 @@ namespace Aether.Editor.Views
         {
             try
             {
-                if (DataContext is not EditorSession session || !session.Level.IsAxisDragging)
+                if (DataContext is not EditorSession session)
+                    return;
+
+                if (m_drag == CameraDragKind.Orbit || m_drag == CameraDragKind.Pan)
+                {
+                    Point pos = e.GetPosition(this);
+                    float dx = (float)(pos.X - m_last.X);
+                    float dy = (float)(pos.Y - m_last.Y);
+                    m_last = pos;
+                    if (m_drag == CameraDragKind.Orbit)
+                    {
+                        session.Viewport.OrbitBy(
+                            dx * ViewportCamera.OrbitRadiansPerPixel,
+                            -dy * ViewportCamera.OrbitRadiansPerPixel);
+                    }
+                    else
+                    {
+                        float scale = session.Viewport.Camera.Distance * ViewportCamera.PanFractionPerPixel;
+                        session.Viewport.PanBy(-dx * scale, -dy * scale);
+                    }
+                    e.Handled = true;
+                    return;
+                }
+
+                if (!session.Level.IsAxisDragging)
                     return;
                 ViewportPresenter? presenter = session.Viewport.Presenter;
                 if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
@@ -140,10 +182,35 @@ namespace Aether.Editor.Views
             }
         }
 
+        private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+        {
+            try
+            {
+                if (DataContext is not EditorSession session)
+                    return;
+                // Scroll up (positive Y) zooms in: distance decreases.
+                float step = session.Viewport.Camera.Distance * ViewportCamera.ZoomFractionPerWheel;
+                session.Viewport.ZoomBy((float)(-e.Delta.Y * step));
+                e.Handled = true;
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void BeginCameraDrag(CameraDragKind kind, PointerPressedEventArgs e)
+        {
+            m_drag = kind;
+            m_last = e.GetPosition(this);
+            e.Pointer.Capture(this);
+            e.Handled = true;
+        }
+
         private void EndDrag(IPointer? pointer)
         {
             if (DataContext is EditorSession session && session.Level.IsAxisDragging)
                 session.Level.EndAxisDrag();
+            m_drag = CameraDragKind.None;
             pointer?.Capture(null);
         }
 
@@ -208,5 +275,15 @@ namespace Aether.Editor.Views
         private readonly System.Diagnostics.Stopwatch m_clock = new System.Diagnostics.Stopwatch();
         private DispatcherTimer? m_timer;
         private WriteableBitmap? m_bitmap;
+        private CameraDragKind m_drag;
+        private Point m_last;
+
+        private enum CameraDragKind
+        {
+            None,
+            Gizmo,
+            Orbit,
+            Pan
+        }
     }
 }

@@ -130,8 +130,8 @@ namespace LevelEditorCore
 
         /// <summary>
         /// Presenters draw the gizmo at <paramref name="selectedOrigin"/> when
-        /// it is set. <paramref name="positions"/> are the bound-scene world
-        /// translations so software draw uses the same LookAt as pick/RTT.</summary>
+        /// it is set. <paramref name="positions"/> stay the bound-scene world
+        /// translations; LookAt comes from <see cref="ViewportSceneCamera.Current"/>.</summary>
         public static void SetOverlay(IReadOnlyList<Vec3F> positions, Vec3F? selectedOrigin)
         {
             if (positions == null || positions.Count == 0)
