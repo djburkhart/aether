@@ -36,8 +36,9 @@ namespace Aether.Editor
     /// ATF descriptors, DomNode mutation, HistoryContext undo,
     /// DomXml Open/Save round-trip, Viewport CPU pick of Level placeholders,
     /// a headless translate-gizmo +X / Undo of PointLight, a documented
-    /// rotate-gizmo +Y / Undo and scale-gizmo +X / Undo, and a documented
-    /// Viewport camera orbit that moves PointLight's pick pixel.</summary>
+    /// rotate-gizmo +Y / Undo and scale-gizmo +X / Undo, a documented
+    /// Viewport camera orbit that moves PointLight's pick pixel, and
+    /// Play / Pause / Stop with GamePlay yaw restore.</summary>
     internal static class HeadlessSession
     {
         public static int Run()
@@ -633,6 +634,10 @@ namespace Aether.Editor
             if (cameraCode != 0)
                 return cameraCode;
 
+            int playCode = ProvePlayPauseStop(session, "load");
+            if (playCode != 0)
+                return playCode;
+
             light = session.Level.Find("PointLight");
             if (light == null)
             {
@@ -1174,8 +1179,281 @@ namespace Aether.Editor
             if (cameraCode != 0)
                 return cameraCode;
 
+            int playCode = ProvePlayPauseStop(session, "viewport ticks");
+            if (playCode != 0)
+                return playCode;
+
             Console.WriteLine("headless stride ok");
             return 0;
+        }
+
+        /// <summary>
+        /// After LightTest load: print UpdateType Editing, Play (GamePlay +
+        /// PointLight yaw / PlayElapsed), Pause (no further advance), Stop
+        /// (Editing + TRS restore outside History), then gizmo +X / Undo.
+        /// CPU only; Tick must not throw.</summary>
+        private static int ProvePlayPauseStop(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            Console.WriteLine("level play path: LevelSession.Play / Pause / Stop (F5 / F6 / Shift+F5)");
+            Console.WriteLine(
+                "level play restore: outside History (Stop is not an extra undo; GamePlay yaw is discarded)");
+            Console.WriteLine(
+                "level play mover: {0} Rotation.Y += {1} * dt (GamePlay only)",
+                LevelSession.GamePlayMoverName,
+                LevelSession.GamePlayYawRadiansPerSecond);
+
+            try
+            {
+                presenter.Tick(NextTickTime(presenter));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw during play after {0}: {1}", afterLabel, ex.Message);
+                return 200;
+            }
+
+            Console.WriteLine("level update type after load: {0}", session.Level.EngineUpdateType);
+            Console.WriteLine("viewport last update type after load: {0}", presenter.LastUpdateType);
+            if (session.Level.EngineUpdateType != UpdateType.Editing ||
+                presenter.LastUpdateType != UpdateType.Editing)
+            {
+                Console.Error.WriteLine("Error: after {0} UpdateType should be Editing, got {1} / {2}.",
+                    afterLabel, session.Level.EngineUpdateType, presenter.LastUpdateType);
+                return 201;
+            }
+
+            if (!session.Level.Select(LevelSession.GamePlayMoverName))
+            {
+                Console.Error.WriteLine("Error: Select({0}) failed before Play after {1}.",
+                    LevelSession.GamePlayMoverName, afterLabel);
+                return 202;
+            }
+
+            LevelNodeItem? lightItem = session.Level.SelectedNode;
+            var gob = lightItem != null ? lightItem.Node.As<IGameObject>() : null;
+            if (gob == null)
+            {
+                Console.Error.WriteLine("Error: {0} did not adapt to IGameObject before Play after {1}.",
+                    LevelSession.GamePlayMoverName, afterLabel);
+                return 203;
+            }
+
+            Vec3F snapT = gob.Translation;
+            Vec3F snapR = gob.Rotation;
+            Vec3F snapS = gob.Scale;
+            Console.WriteLine(
+                "PointLight TRS before play: T={0},{1},{2} R={3},{4},{5} S={6},{7},{8}",
+                snapT.X, snapT.Y, snapT.Z, snapR.X, snapR.Y, snapR.Z, snapS.X, snapS.Y, snapS.Z);
+
+            if (!session.Level.Play())
+            {
+                Console.Error.WriteLine("Error: LevelSession.Play failed after {0}.", afterLabel);
+                return 204;
+            }
+            Console.WriteLine("level play state: {0}", session.Level.PlayState);
+            Console.WriteLine("level update type after play: {0}", session.Level.EngineUpdateType);
+
+            try
+            {
+                for (int i = 0; i < 8; i++)
+                    presenter.Tick(NextTickTime(presenter));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw while Playing after {0}: {1}", afterLabel, ex.Message);
+                session.Level.Stop();
+                return 205;
+            }
+
+            Console.WriteLine("viewport last update type after play ticks: {0}", presenter.LastUpdateType);
+            Console.WriteLine("level play elapsed after play ticks: {0}", session.Level.PlayElapsed);
+            Console.WriteLine("PointLight play rotate Y after play ticks: {0}", gob.Rotation.Y);
+            if (presenter.LastUpdateType != UpdateType.GamePlay ||
+                session.Level.EngineUpdateType != UpdateType.GamePlay)
+            {
+                Console.Error.WriteLine("Error: after Play ticks UpdateType should be GamePlay, got {0} / {1}.",
+                    session.Level.EngineUpdateType, presenter.LastUpdateType);
+                session.Level.Stop();
+                return 206;
+            }
+            if (session.Level.PlayElapsed < 0.2)
+            {
+                Console.Error.WriteLine(
+                    "Error: PlayElapsed should advance while Playing after {0}, got {1}.",
+                    afterLabel, session.Level.PlayElapsed);
+                session.Level.Stop();
+                return 207;
+            }
+            if (Math.Abs(gob.Rotation.Y - snapR.Y) < 0.05f)
+            {
+                Console.Error.WriteLine(
+                    "Error: {0} Rotation.Y should drift during GamePlay after {1} (still {2}).",
+                    LevelSession.GamePlayMoverName, afterLabel, gob.Rotation.Y);
+                session.Level.Stop();
+                return 208;
+            }
+
+            BoundSceneObject? bound = session.Level.BoundScene.Find(LevelSession.GamePlayMoverName);
+            if (bound == null || Math.Abs(bound.Rotation.Y - gob.Rotation.Y) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene {0} rotate Y after Play should match the GameObject.",
+                    LevelSession.GamePlayMoverName);
+                session.Level.Stop();
+                return 209;
+            }
+
+            if (session.Level.BeginAxisDrag(TranslateAxis.X))
+            {
+                Console.Error.WriteLine("Error: BeginAxisDrag should fail while Playing after {0}.", afterLabel);
+                session.Level.EndAxisDrag();
+                session.Level.Stop();
+                return 210;
+            }
+
+            double elapsedAtPause = session.Level.PlayElapsed;
+            float yawAtPause = gob.Rotation.Y;
+            if (!session.Level.Pause())
+            {
+                Console.Error.WriteLine("Error: LevelSession.Pause failed after {0}.", afterLabel);
+                session.Level.Stop();
+                return 211;
+            }
+            Console.WriteLine("level play state after pause: {0}", session.Level.PlayState);
+            Console.WriteLine("level update type after pause: {0}", session.Level.EngineUpdateType);
+
+            try
+            {
+                for (int i = 0; i < 8; i++)
+                    presenter.Tick(NextTickTime(presenter));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw while Paused after {0}: {1}", afterLabel, ex.Message);
+                session.Level.Stop();
+                return 212;
+            }
+
+            Console.WriteLine("viewport last update type after pause ticks: {0}", presenter.LastUpdateType);
+            Console.WriteLine("level play elapsed after pause ticks: {0}", session.Level.PlayElapsed);
+            Console.WriteLine("PointLight play rotate Y after pause ticks: {0}", gob.Rotation.Y);
+            if (presenter.LastUpdateType != UpdateType.Paused ||
+                session.Level.EngineUpdateType != UpdateType.Paused)
+            {
+                Console.Error.WriteLine("Error: after Pause ticks UpdateType should be Paused, got {0} / {1}.",
+                    session.Level.EngineUpdateType, presenter.LastUpdateType);
+                session.Level.Stop();
+                return 213;
+            }
+            if (Math.Abs(session.Level.PlayElapsed - elapsedAtPause) > 1e-6)
+            {
+                Console.Error.WriteLine(
+                    "Error: PlayElapsed advanced while Paused after {0} ({1} → {2}).",
+                    afterLabel, elapsedAtPause, session.Level.PlayElapsed);
+                session.Level.Stop();
+                return 214;
+            }
+            if (Math.Abs(gob.Rotation.Y - yawAtPause) > 1e-5f)
+            {
+                Console.Error.WriteLine(
+                    "Error: {0} Rotation.Y advanced while Paused after {1} ({2} → {3}).",
+                    LevelSession.GamePlayMoverName, afterLabel, yawAtPause, gob.Rotation.Y);
+                session.Level.Stop();
+                return 215;
+            }
+
+            if (!session.Level.Stop())
+            {
+                Console.Error.WriteLine("Error: LevelSession.Stop failed after {0}.", afterLabel);
+                return 216;
+            }
+
+            try
+            {
+                presenter.Tick(NextTickTime(presenter));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw after Stop ({0}): {1}", afterLabel, ex.Message);
+                return 217;
+            }
+
+            Console.WriteLine("level play state after stop: {0}", session.Level.PlayState);
+            Console.WriteLine("level update type after stop: {0}", session.Level.EngineUpdateType);
+            Console.WriteLine("viewport last update type after stop: {0}", presenter.LastUpdateType);
+            Console.WriteLine(
+                "PointLight TRS after stop: T={0},{1},{2} R={3},{4},{5} S={6},{7},{8}",
+                gob.Translation.X, gob.Translation.Y, gob.Translation.Z,
+                gob.Rotation.X, gob.Rotation.Y, gob.Rotation.Z,
+                gob.Scale.X, gob.Scale.Y, gob.Scale.Z);
+
+            if (session.Level.EngineUpdateType != UpdateType.Editing ||
+                presenter.LastUpdateType != UpdateType.Editing)
+            {
+                Console.Error.WriteLine("Error: after Stop UpdateType should be Editing, got {0} / {1}.",
+                    session.Level.EngineUpdateType, presenter.LastUpdateType);
+                return 218;
+            }
+            if (!NearlyEqual(gob.Translation, snapT) ||
+                !NearlyEqual(gob.Rotation, snapR) ||
+                !NearlyEqual(gob.Scale, snapS))
+            {
+                Console.Error.WriteLine(
+                    "Error: {0} TRS after Stop should match the pre-play snapshot after {1}.",
+                    LevelSession.GamePlayMoverName, afterLabel);
+                return 219;
+            }
+
+            bound = session.Level.BoundScene.Find(LevelSession.GamePlayMoverName);
+            if (bound == null ||
+                !NearlyEqual(bound.Translation, snapT) ||
+                !NearlyEqual(bound.Rotation, snapR) ||
+                !NearlyEqual(bound.Scale, snapS))
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene {0} TRS after Stop should match the pre-play snapshot.",
+                    LevelSession.GamePlayMoverName);
+                return 220;
+            }
+
+            Console.WriteLine("viewport path after play: {0}", presenter.ActivePath);
+            if (!OperatingSystem.IsWindows() &&
+                presenter.ActivePath != ViewportPresenter.SoftwarePath)
+            {
+                Console.Error.WriteLine(
+                    "Error: Linux viewport path should stay {0} after play, got {1}.",
+                    ViewportPresenter.SoftwarePath,
+                    presenter.ActivePath);
+                return 221;
+            }
+
+            Console.WriteLine("headless play/pause/stop ok after {0}", afterLabel);
+
+            int translateCode = ProveViewportTranslate(session, afterLabel + " after stop");
+            if (translateCode != 0)
+                return translateCode;
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Monotonic tick time so repeated ticks still produce a non-zero
+        /// elapsed (presenter stores last seconds). Starts well above the
+        /// 0.05-scale values used by older proofs.</summary>
+        private static double NextTickTime(ViewportPresenter presenter)
+        {
+            s_headlessTickClock += 0.05;
+            return s_headlessTickClock;
+        }
+
+        private static double s_headlessTickClock = 100.0;
+
+        private static bool NearlyEqual(Vec3F a, Vec3F b)
+        {
+            return Math.Abs(a.X - b.X) < 1e-5f &&
+                Math.Abs(a.Y - b.Y) < 1e-5f &&
+                Math.Abs(a.Z - b.Z) < 1e-5f;
         }
 
         /// <summary>

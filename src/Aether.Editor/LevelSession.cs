@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -20,7 +21,8 @@ namespace Aether.Editor
 {
     /// <summary>
     /// LevelEditor document session: schema, LightTest.lvl load, Open/Save,
-    /// selection, HistoryContext, and a bound scene pushed to IGameEngineProxy.
+    /// selection, HistoryContext, a bound scene pushed to IGameEngineProxy,
+    /// and Play / Pause / Stop for the bound world.
     /// The Avalonia hierarchy view binds here.</summary>
     public sealed class LevelSession : INotifyPropertyChanged
     {
@@ -64,6 +66,16 @@ namespace Aether.Editor
         /// <see cref="ApplyScaleDelta"/>. Additive on that axis.</summary>
         public const float DocumentedScaleDeltaX = 0.5f;
 
+        /// <summary>
+        /// LightTest object that yaws during <see cref="PlayState.Playing"/>
+        /// only. Proof that GamePlay ticks do work without a physics engine.</summary>
+        public const string GamePlayMoverName = "PointLight";
+
+        /// <summary>
+        /// Documented GamePlay yaw rate (radians / second) applied to
+        /// <see cref="GamePlayMoverName"/> Rotation.Y. Only while Playing.</summary>
+        public const float GamePlayYawRadiansPerSecond = 0.8f;
+
         public HistoryContext History { get; private set; } = null!;
 
         public SelectionContext Selection { get; private set; } = null!;
@@ -77,6 +89,78 @@ namespace Aether.Editor
         /// CPU snapshot of GameObjects. Always populated after load, including
         /// on ubuntu CI where the engine stays <see cref="NullGameEngine"/>.</summary>
         public BoundLevelScene BoundScene { get; }
+
+        /// <summary>
+        /// Play / Pause / Stop for the bound Level. <see cref="Play"/> /
+        /// <see cref="Pause"/> / <see cref="Stop"/> are the headless APIs.
+        /// Keys: F5 Play, F6 Pause, Shift+F5 Stop.</summary>
+        public PlayState PlayState
+        {
+            get { return m_playState; }
+            private set
+            {
+                if (m_playState == value)
+                    return;
+                m_playState = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(EngineUpdateType));
+                OnPropertyChanged(nameof(EditingToolsEnabled));
+                OnPropertyChanged(nameof(CanPlay));
+                OnPropertyChanged(nameof(CanPause));
+                OnPropertyChanged(nameof(CanStop));
+            }
+        }
+
+        /// <summary>
+        /// <see cref="UpdateType"/> ViewportPresenter passes to
+        /// <see cref="IGameEngineProxy.Update"/>. Editing while Stopped,
+        /// GamePlay while Playing, Paused while Paused.</summary>
+        public UpdateType EngineUpdateType
+        {
+            get
+            {
+                switch (m_playState)
+                {
+                    case PlayState.Playing:
+                        return UpdateType.GamePlay;
+                    case PlayState.Paused:
+                        return UpdateType.Paused;
+                    default:
+                        return UpdateType.Editing;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gizmos and pick-to-move run only while Stopped. Camera orbit
+        /// may stay during Play / Pause.</summary>
+        public bool EditingToolsEnabled
+        {
+            get { return m_playState == PlayState.Stopped; }
+        }
+
+        public bool CanPlay
+        {
+            get { return m_playState != PlayState.Playing; }
+        }
+
+        public bool CanPause
+        {
+            get { return m_playState == PlayState.Playing; }
+        }
+
+        public bool CanStop
+        {
+            get { return m_playState != PlayState.Stopped; }
+        }
+
+        /// <summary>
+        /// Seconds accumulated while <see cref="PlayState.Playing"/>.
+        /// Does not advance while Paused or Stopped.</summary>
+        public double PlayElapsed
+        {
+            get { return m_playElapsed; }
+        }
 
         /// <summary>
         /// <see cref="BoundLevelScene.StrideBackend"/> when the Stride engine
@@ -158,9 +242,10 @@ namespace Aether.Editor
             get
             {
                 string doc = m_filePath != null ? Path.GetFileName(m_filePath) : "LightTest.lvl";
+                string play = " — " + m_playState;
                 if (m_selectedNode == null)
-                    return doc + (IsDirty ? "*" : string.Empty) + " — " + GameObjectCount + " game objects";
-                return doc + (IsDirty ? "*" : string.Empty) + " — " + m_selectedNode.Display;
+                    return doc + (IsDirty ? "*" : string.Empty) + " — " + GameObjectCount + " game objects" + play;
+                return doc + (IsDirty ? "*" : string.Empty) + " — " + m_selectedNode.Display + play;
             }
         }
 
@@ -281,6 +366,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return null;
                 BoundSceneObject? hit = BoundScene.PickAt((float)pixelX, (float)pixelY, width, height);
                 return ApplyPick(hit);
             }
@@ -334,6 +421,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return null;
                 if (!TrySelectedOrigin(out Vec3F origin))
                     return null;
                 ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
@@ -383,6 +472,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return false;
                 IGameObject? gob = SelectedGameObject();
                 if (gob == null || !CanTranslate(gob))
                     return false;
@@ -526,6 +617,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return false;
                 IGameObject? gob = SelectedGameObject();
                 if (gob == null || !CanTranslate(gob))
                     return false;
@@ -554,6 +647,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return false;
                 IGameObject? gob = SelectedGameObject();
                 if (gob == null || !CanManipulate(gob))
                     return false;
@@ -678,6 +773,8 @@ namespace Aether.Editor
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return false;
                 IGameObject? gob = SelectedGameObject();
                 if (gob == null || !CanManipulate(gob))
                     return false;
@@ -842,12 +939,123 @@ namespace Aether.Editor
         }
 
         /// <summary>
+        /// Start or resume GamePlay. Snapshots every
+        /// <see cref="ITransformable"/> Translation / Rotation / Scale (and
+        /// TransformationType) the first time we leave Stopped. Resume from
+        /// Pause does not re-snapshot. Never throws.</summary>
+        public bool Play()
+        {
+            try
+            {
+                if (m_playState == PlayState.Playing)
+                    return true;
+                if (m_playState == PlayState.Paused)
+                {
+                    PlayState = PlayState.Playing;
+                    OnPropertyChanged(nameof(StatusText));
+                    return true;
+                }
+
+                CancelGizmoDrag();
+                CapturePlaySnapshot();
+                m_playElapsed = 0;
+                OnPropertyChanged(nameof(PlayElapsed));
+                PrepareGamePlayMover();
+                PlayState = PlayState.Playing;
+                PushGizmo();
+                OnPropertyChanged(nameof(StatusText));
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Freeze GamePlay. Further ticks use <see cref="UpdateType.Paused"/>
+        /// with elapsed ~0; the GamePlay yaw does not advance. Never throws.</summary>
+        public bool Pause()
+        {
+            try
+            {
+                if (m_playState != PlayState.Playing)
+                    return m_playState == PlayState.Paused;
+                PlayState = PlayState.Paused;
+                OnPropertyChanged(nameof(StatusText));
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Return to editing. Restores the Play snapshot
+        /// <b>outside History</b> so Stop is not an extra undo and play-time
+        /// yaw is not recorded. Re-enables gizmos. Never throws.</summary>
+        public bool Stop()
+        {
+            try
+            {
+                if (m_playState == PlayState.Stopped)
+                    return true;
+
+                RestorePlaySnapshot();
+                DiscardPlaySnapshot();
+                m_playElapsed = 0;
+                OnPropertyChanged(nameof(PlayElapsed));
+                PlayState = PlayState.Stopped;
+                SyncBoundScene();
+                OnPropertyChanged(nameof(StatusText));
+                return true;
+            }
+            catch (Exception)
+            {
+                DiscardPlaySnapshot();
+                m_playElapsed = 0;
+                PlayState = PlayState.Stopped;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Called each Viewport tick. While Playing, accumulates
+        /// <see cref="PlayElapsed"/> and yaws <see cref="GamePlayMoverName"/>.
+        /// Writes TRS outside History. No-op while Paused or Stopped.
+        /// Never throws.</summary>
+        public void TickPlay(FrameTime time)
+        {
+            try
+            {
+                if (m_playState != PlayState.Playing)
+                    return;
+                float dt = time.ElapsedTime;
+                if (dt < 0f)
+                    dt = 0f;
+                if (dt == 0f)
+                    return;
+
+                m_playElapsed += dt;
+                ApplyGamePlayMover(dt);
+                RefreshPlayVisuals();
+                OnPropertyChanged(nameof(PlayElapsed));
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
         /// Same pick as <see cref="PickAt"/> in NDC (−1..1, y up). Aspect is
         /// the Viewport buffer width/height.</summary>
         public LevelNodeItem? PickAtNdc(float ndcX, float ndcY, float aspect)
         {
             try
             {
+                if (!EditingToolsEnabled)
+                    return null;
                 BoundSceneObject? hit = BoundScene.PickAtNdc(ndcX, ndcY, aspect);
                 return ApplyPick(hit);
             }
@@ -892,6 +1100,7 @@ namespace Aether.Editor
 
         private void BindDocument(DomNode document, string? filePath)
         {
+            DiscardPlayState();
             CancelGizmoDrag();
             UnhookHistory();
 
@@ -1128,16 +1337,16 @@ namespace Aether.Editor
             return m_selectedNode.Node.As<IGameObject>();
         }
 
-        private static bool CanTranslate(IGameObject gob)
+        private bool CanTranslate(IGameObject gob)
         {
             if (!CanManipulate(gob))
                 return false;
             return (gob.TransformationType & TransformationTypes.Translation) != 0;
         }
 
-        private static bool CanManipulate(IGameObject gob)
+        private bool CanManipulate(IGameObject gob)
         {
-            return gob != null && !gob.IsLocked;
+            return EditingToolsEnabled && gob != null && !gob.IsLocked;
         }
 
         private static void EnsureTransformFlag(IGameObject gob, TransformationTypes flag)
@@ -1216,7 +1425,7 @@ namespace Aether.Editor
 
                 Vec3F? origin = null;
                 IGameObject? gob = SelectedGameObject();
-                if (gob != null)
+                if (EditingToolsEnabled && gob != null)
                     origin = SelectedWorldTranslation(gob);
                 TranslateGizmo.SetOverlay(positions, origin, m_gizmoMode);
             }
@@ -1328,11 +1537,136 @@ namespace Aether.Editor
                 Math.Abs(a.Z - b.Z) < 1e-5f;
         }
 
+        private void CapturePlaySnapshot()
+        {
+            m_playSnapshot = new List<PlayTrsSnapshot>();
+            if (Document == null)
+                return;
+            foreach (IGameObject gob in LevelDocuments.EnumerateGameObjects(Document))
+            {
+                if (gob == null)
+                    continue;
+                m_playSnapshot.Add(new PlayTrsSnapshot(
+                    gob, gob.Translation, gob.Rotation, gob.Scale, gob.TransformationType));
+            }
+        }
+
+        /// <summary>
+        /// Write snapshot TRS without History.Begin / End. Stop is not an
+        /// extra undo; play-time GamePlay yaw is discarded.</summary>
+        private void RestorePlaySnapshot()
+        {
+            if (m_playSnapshot == null)
+                return;
+            foreach (PlayTrsSnapshot snap in m_playSnapshot)
+            {
+                IGameObject gob = snap.GameObject;
+                if (gob == null)
+                    continue;
+                gob.TransformationType = gob.TransformationType
+                    | TransformationTypes.Translation
+                    | TransformationTypes.Rotation
+                    | TransformationTypes.Scale;
+                gob.Translation = snap.Translation;
+                gob.Rotation = snap.Rotation;
+                gob.Scale = snap.Scale;
+                gob.TransformationType = snap.TransformationType;
+            }
+        }
+
+        private void DiscardPlaySnapshot()
+        {
+            m_playSnapshot = null;
+            m_playMover = null;
+        }
+
+        /// <summary>
+        /// Drop play state when the document is replaced. Does not restore
+        /// the old world's snapshot onto the new document.</summary>
+        private void DiscardPlayState()
+        {
+            DiscardPlaySnapshot();
+            m_playElapsed = 0;
+            if (m_playState != PlayState.Stopped)
+            {
+                PlayState = PlayState.Stopped;
+                OnPropertyChanged(nameof(PlayElapsed));
+                OnPropertyChanged(nameof(StatusText));
+            }
+        }
+
+        private void PrepareGamePlayMover()
+        {
+            m_playMover = Document != null
+                ? LevelDocuments.FindGameObject(Document, GamePlayMoverName)
+                : null;
+            if (m_playMover != null)
+                EnsureTransformFlag(m_playMover, TransformationTypes.Rotation);
+        }
+
+        private void ApplyGamePlayMover(float elapsed)
+        {
+            IGameObject? gob = m_playMover;
+            if (gob == null)
+                return;
+            Vec3F rotation = gob.Rotation;
+            gob.Rotation = new Vec3F(
+                rotation.X,
+                rotation.Y + GamePlayYawRadiansPerSecond * elapsed,
+                rotation.Z);
+        }
+
+        /// <summary>
+        /// Refresh CPU bound scene + placeholder overlay without
+        /// SetGameWorld (engine.Update already syncs Stride entities).</summary>
+        private void RefreshPlayVisuals()
+        {
+            string backend = Engine is StrideGameEngine
+                ? BoundLevelScene.StrideBackend
+                : BoundLevelScene.BoundBackend;
+            try
+            {
+                BoundScene.SyncFrom(Game, backend);
+            }
+            catch (Exception)
+            {
+            }
+            PushPlaceholders();
+            PushGizmo();
+        }
+
+        private PlayState m_playState = PlayState.Stopped;
+        private double m_playElapsed;
+        private List<PlayTrsSnapshot>? m_playSnapshot;
+        private IGameObject? m_playMover;
         private LevelNodeItem? m_selectedNode;
         private string? m_filePath;
         private bool m_historyHooked;
         private GizmoMode m_gizmoMode = GizmoMode.Translate;
         private GizmoDrag? m_drag;
+
+        private sealed class PlayTrsSnapshot
+        {
+            public PlayTrsSnapshot(
+                IGameObject gameObject,
+                Vec3F translation,
+                Vec3F rotation,
+                Vec3F scale,
+                TransformationTypes transformationType)
+            {
+                GameObject = gameObject;
+                Translation = translation;
+                Rotation = rotation;
+                Scale = scale;
+                TransformationType = transformationType;
+            }
+
+            public IGameObject GameObject { get; }
+            public Vec3F Translation { get; }
+            public Vec3F Rotation { get; }
+            public Vec3F Scale { get; }
+            public TransformationTypes TransformationType { get; }
+        }
 
         private enum GizmoDragKind
         {

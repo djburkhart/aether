@@ -87,17 +87,50 @@ namespace Aether.Editor
             m_engine = engine;
         }
 
+        /// <summary>
+        /// Bind the Level session so each tick uses
+        /// <see cref="LevelSession.EngineUpdateType"/> and
+        /// <see cref="LevelSession.TickPlay"/>.</summary>
+        public void BindLevel(LevelSession? level)
+        {
+            m_level = level;
+            if (level != null)
+                m_engine = level.Engine;
+        }
+
+        /// <summary>
+        /// <see cref="UpdateType"/> last passed to
+        /// <see cref="IGameEngineProxy.Update"/>. Headless prints this.</summary>
+        public UpdateType LastUpdateType
+        {
+            get { return m_lastUpdateType; }
+        }
+
         /// <summary>Advance one frame. Does not touch the UI thread by itself. Never throws.</summary>
         public void Tick(double seconds)
         {
             try
             {
+                if (m_level != null)
+                    m_engine = m_level.Engine;
+
+                UpdateType type = m_level != null
+                    ? m_level.EngineUpdateType
+                    : UpdateType.Editing;
+                m_lastUpdateType = type;
+
                 float elapsed = m_frameCount == 0 ? 0f : (float)(seconds - m_time);
                 if (elapsed < 0f)
                     elapsed = 0f;
+                if (type == UpdateType.Paused)
+                    elapsed = 0f;
                 m_time = seconds;
+
+                var frame = new FrameTime(seconds, elapsed);
+                if (m_level != null)
+                    m_level.TickPlay(frame);
                 if (m_engine != null)
-                    m_engine.Update(new FrameTime(seconds, elapsed), UpdateType.Editing);
+                    m_engine.Update(frame, type);
 
                 if (StrideGpuFrameSource.TryRender(m_pixels, m_width, m_height, seconds))
                     m_path = StrideRttPath;
@@ -129,6 +162,8 @@ namespace Aether.Editor
         private byte[] m_pixels = Array.Empty<byte>();
         private double m_time;
         private IGameEngineProxy? m_engine;
+        private LevelSession? m_level;
+        private UpdateType m_lastUpdateType = UpdateType.Editing;
     }
 
     /// <summary>

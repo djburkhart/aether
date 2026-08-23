@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, viewport CPU pick of PointLight, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, viewport CPU pick of PointLight, Play / Pause / Stop of the bound Level, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
 
 ---
 
@@ -756,7 +756,7 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 
 # Stride viewport (live center pane)
 
-The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG. Not play-in-editor. #2741 is still open** — this is Aether's Image control, not an official Avalonia Game control.
+The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG.** Play / Pause / Stop ticks the bound Level (`UpdateType.GamePlay` / `Paused` / `Editing`) without physics. **#2741 is still open** — this is Aether's Image control, not an official Avalonia Game control.
 
 ## Layout
 
@@ -842,6 +842,24 @@ One editable camera. `ViewportSceneCamera.Current` is a `ViewportCamera` (target
 Headless prints the default camera (target / yaw / pitch / distance / eye), applies the documented orbit + zoom, prints the new camera, and checks that PointLight's projected pixel moved (old pixel is a miss or a different hit). Then it picks PointLight at the new pixel and repeats gizmo +X / Undo.
 
 Out of scope here: WASD fly-cam, perspective/ortho toggle, camera bookmarks, official Avalonia Game control (#2741).
+
+## Play / Pause / Stop (editor)
+
+The bound Level world can Play / Pause / Stop. `LevelSession` holds `PlayState`. `ViewportPresenter.Tick` calls `IGameEngineProxy.Update` with the matching `UpdateType` (`Editing` / `GamePlay` / `Paused`). Pause forces elapsed ~0. No physics, AI, character controller, or #2741 Game control.
+
+| Piece | Behavior |
+|---|---|
+| UI | Viewport toolbar + Game menu. **F5** Play, **F6** Pause, **Shift+F5** Stop. |
+| Headless | `LevelSession.Play` / `Pause` / `Stop` (also `EditorSession.Play` / `Pause` / `Stop`). |
+| Snapshot | On Play (from Stopped), every `ITransformable` Translation / Rotation / Scale (and TransformationType) is stored. |
+| Restore | **Outside History.** Stop writes the snapshot without `History.Begin` / `End`, so Stop is not an extra undo and the GamePlay yaw is discarded. |
+| GamePlay proof | `PointLight` yaws `Rotation.Y` by `0.8` rad/s while Playing only (`LevelSession.GamePlayMoverName`). `PlayElapsed` advances only while Playing. |
+| Tools | Gizmos and pick-to-move are disabled during Play / Pause. Camera orbit / pan / zoom stay. Stop re-enables gizmos. |
+| Linux / no GPU | Present path stays `software-writeablebitmap`. `Tick` / `TryRender` must not throw. Placeholders still render on the GPU path. |
+
+Headless after LightTest load: prints `UpdateType` Editing, Play + several ticks (GamePlay + PointLight yaw / PlayElapsed), Pause + more ticks (no further advance), Stop (Editing + PointLight TRS matches the pre-play snapshot), then translate gizmo +X / Undo.
+
+Out of scope here: physics, collision, character controllers, official Avalonia Game control (#2741).
 
 ## Next cut
 

@@ -29,6 +29,8 @@ namespace Aether.Editor
         {
             if (level == null)
                 return;
+            m_level = level;
+            Presenter.BindLevel(level);
             Presenter.BindEngine(level.Engine);
             Presenter.Tick(0.016);
         }
@@ -111,10 +113,14 @@ namespace Aether.Editor
                 string scene = StrideRttPresenter.PlaceholderCount > 0
                     ? StrideRttPresenter.PlaceholderCount + " scene objects"
                     : "no level scene";
+                string play = "play " + Presenter.LastUpdateType;
+                if (m_level != null)
+                    play = "play " + m_level.PlayState + " · " + m_level.EngineUpdateType;
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
-                    " · " + scene + " · gizmo " + TranslateGizmo.OverlayMode +
-                    " · W move · E rotate · R scale · click to pick · drag handle · RMB orbit · MMB pan · wheel zoom · #2741 open";
+                    " · " + scene + " · " + play +
+                    " · gizmo " + TranslateGizmo.OverlayMode +
+                    " · F5 play · F6 pause · Shift+F5 stop · W move · E rotate · R scale · click to pick · drag handle · RMB orbit · MMB pan · wheel zoom · #2741 open";
             }
         }
 
@@ -122,5 +128,7 @@ namespace Aether.Editor
         {
             get { return OverlayText + "\n" + Result.StatusText; }
         }
+
+        private LevelSession? m_level;
     }
 }

@@ -446,6 +446,24 @@ namespace Aether.Editor
             ActivateLevel();
         }
 
+        /// <summary>Play the bound Level world. Same as <see cref="LevelSession.Play"/>.</summary>
+        public bool Play()
+        {
+            return Level.Play();
+        }
+
+        /// <summary>Pause the bound Level world. Same as <see cref="LevelSession.Pause"/>.</summary>
+        public bool Pause()
+        {
+            return Level.Pause();
+        }
+
+        /// <summary>Stop the bound Level world and restore the Play snapshot. Same as <see cref="LevelSession.Stop"/>.</summary>
+        public bool Stop()
+        {
+            return Level.Stop();
+        }
+
         public ScriptResult RunScript()
         {
             Script.BeginRun();
@@ -713,7 +731,9 @@ namespace Aether.Editor
                 e.PropertyName == nameof(LevelSession.WindowTitle) ||
                 e.PropertyName == nameof(LevelSession.StatusText) ||
                 e.PropertyName == nameof(LevelSession.CanSave) ||
-                e.PropertyName == nameof(LevelSession.FilePath))
+                e.PropertyName == nameof(LevelSession.FilePath) ||
+                e.PropertyName == nameof(LevelSession.PlayState) ||
+                e.PropertyName == nameof(LevelSession.EngineUpdateType))
             {
                 NotifyFileState();
                 OnPropertyChanged(nameof(FilePath));
