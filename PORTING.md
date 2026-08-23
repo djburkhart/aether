@@ -778,7 +778,7 @@ Opening a `.lvl` does not replace the center Viewport. Level stays a left tool.
 | **`software-writeablebitmap`** (live on ubuntu CI) | CPU BGRA: pulsing clear + gold wireframe cube. Copied into an Avalonia `WriteableBitmap` / `Image` on a `DispatcherTimer` (~30 Hz). Does not steal mouse from other panes. Resizes with the dock (clamped). |
 | **`stride-rtt`** (same Image control) | `StrideRttPresenter` calls `GraphicsDevice.New` (no `Game.Run` loop), draws a lit cyan cube to an offscreen `Texture`, `GetData` → BGRA. Clear is dark navy so it is visually distinct from the software pulse. |
 | Stride GPU on ubuntu CI | `GraphicsDevice.New` fails (`Failed to create vulkan instance: ErrorIncompatibleDriver`). Null graphics was removed in 4.4. **CI is expected to stay on `software-writeablebitmap`.** Headless prints `stride-rtt skipped: …`. |
-| Windows / a machine with D3D or Vulkan | `--headless-session` should print `viewport path: stride-rtt` and `viewport frames: N`. `Aether.Stride` sets `StridePlatform` from the OS (Windows → Direct3D11, Linux → Vulkan). |
+| Windows / a machine with D3D or Vulkan | `--headless-session` should print `viewport path: stride-rtt` and `viewport frames: N`. `src/Directory.Build.props` sets `StridePlatform` from the OS (Windows → Direct3D11, Linux → Vulkan) so the editor copies the matching `Stride.Graphics.dll`. Without that, Linux loads the D3D11 assembly and `DXGI.GetApi` NREs. |
 | Official Avalonia Game control | **#2741 still open.** |
 | HWND / NativeControlHost | Not added. RTT is the cross-platform path. |
 
