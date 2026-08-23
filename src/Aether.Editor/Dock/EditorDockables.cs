@@ -5,8 +5,8 @@ using Dock.Model.Mvvm.Controls;
 namespace Aether.Editor.Dock
 {
     /// <summary>
-    /// Dock.Avalonia document whose view binds to <see cref="EditorSession"/>.</summary>
-    public sealed class ObjectsDocument : Document
+    /// UsingDom object list — left tool around the center Viewport.</summary>
+    public sealed class ObjectsDocument : Tool
     {
         public ObjectsDocument(EditorSession session)
         {
@@ -20,8 +20,8 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
-    /// CircuitEditor node-graph document.</summary>
-    public sealed class CircuitGraphDocument : Document
+    /// CircuitEditor node-graph — bottom tool.</summary>
+    public sealed class CircuitGraphDocument : Tool
     {
         public CircuitGraphDocument(EditorSession session)
         {
@@ -35,8 +35,8 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
-    /// LevelEditor hierarchy document.</summary>
-    public sealed class LevelDocument : Document
+    /// LevelEditor hierarchy — left tool around the center Viewport.</summary>
+    public sealed class LevelDocument : Tool
     {
         public LevelDocument(EditorSession session)
         {
@@ -50,8 +50,8 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
-    /// TimelineEditor tracks/intervals document.</summary>
-    public sealed class TimelineDocument : Document
+    /// TimelineEditor tracks/intervals — bottom tool.</summary>
+    public sealed class TimelineDocument : Tool
     {
         public TimelineDocument(EditorSession session)
         {
@@ -65,7 +65,7 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
-    /// Stride viewport spike document. Shows host status, not a rendered scene.</summary>
+    /// Center document: live present surface.</summary>
     public sealed class ViewportDocument : Document
     {
         public ViewportDocument(EditorSession session)
@@ -80,8 +80,8 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
-    /// C# / Lua script document.</summary>
-    public sealed class ScriptDocumentDock : Document
+    /// C# / Lua script pane — left tool.</summary>
+    public sealed class ScriptDocumentDock : Tool
     {
         public ScriptDocumentDock(EditorSession session)
         {

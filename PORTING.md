@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts against UsingDom, pause/continue on a breakpoint before Bill Size changes, then Stride Game + GameContextHeadless init). Windows CI is not required; the compiled set stays net10.0.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
 
 ---
 
@@ -754,40 +754,53 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 
 ---
 
-# Stride viewport spike (Avalonia embed)
+# Stride viewport (live center pane)
 
-Exploratory. **Does not claim WYSIWYG or play-in-editor.** Does not claim [stride3d/stride#2741](https://github.com/stride3d/stride/issues/2741) is solved. `NullGameEngine` is still the LevelEditor `IGameEngineProxy`.
+The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG. Not play-in-editor. #2741 is still open.**
 
-## What we tried
+## Layout
+
+`EditorDockFactory` builds:
+
+| Region | Dockables |
+|---|---|
+| **Center document** | Viewport only (active) |
+| Left tools | Objects, Level, Script |
+| Right tools | Properties |
+| Bottom tools | History, Circuit, Timeline, Plugins (+ contributions) |
+
+Opening a `.lvl` does not replace the center Viewport. Level stays a left tool.
+
+## What presents today
+
+| Path | Status |
+|---|---|
+| **`software-writeablebitmap`** (live) | CPU BGRA: pulsing clear + rotating wireframe cube. Copied into an Avalonia `WriteableBitmap` / `Image` on a `DispatcherTimer` (~30 Hz). Does not steal mouse from other panes. Resizes with the dock (clamped). |
+| **`stride-rtt`** | Same control. `StrideGpuFrameSource.TryRender` is the switch point. Returns false until a Stride graphics device exists. |
+| Stride GPU on this Linux CI | `Game` + `GameContextHeadless` → `GameWindowHeadless`, then **`Failed to create vulkan instance: ErrorIncompatibleDriver`**. Null graphics backend was removed in 4.4. |
+| Official Avalonia Game control | **#2741 still open.** This pane is Aether's presenter, not that control. |
+| HWND / NativeControlHost | Not added. Would be a Windows-only extra; ubuntu `net10.0` must keep building. |
+
+Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and a non-empty bitmap, and checks the dock has Viewport in the center with Objects / Level / Script / Properties / History around it.
+
+## What we tried (Stride embed)
 
 | Option | Result |
 |---|---|
-| Official `Stride.Engine` **4.3.0.2507** (stable, net10) | Restores. **No** `GameContextHeadless` / `GameWindowHeadless` in that package. |
-| Official `Stride.Engine` **4.4.0-beta5** (chosen) | Restores on net10.0. Has `GameContextHeadless`, `GameWindowHeadless`, `HeadlessGraphicsPresenter`. |
-| `Game.Run(new GameContextHeadless(64, 64))` on this Linux VM | `Game` constructs. `WindowCreated` fires with `GameWindowHeadless`. Then `GraphicsAdapterFactory` throws **`Failed to create vulkan instance: ErrorIncompatibleDriver`**. No frames. |
-| Null graphics backend | Removed in Stride 4.4. Headless still needs a real graphics API. |
-| In-pane Avalonia control | **#2741 is still open** (created 2025-04-28, last comment 2025-06-23 asking for a draft PR). Scene/prefab editors (#2751 / #2752) are blocked on it. `xplat-editor` is stale vs master. |
-| WPF `GameEngineHost` child HWND | Windows-only. Not used. Next experiment if we add a `net10.0-windows` present project. |
-| AvaStride / Doprez.Stride.Avalonia | Avalonia UI **inside** the game, not an Avalonia-hosted tools viewport. Wrong direction. |
-| NativeControlHost + Vulkan/OpenGL swapchain | Not implemented. Would still need a device this CI host does not have, and an Avalonia present contract #2741 does not provide. |
+| `Stride.Engine` **4.3.0.2507** | No `GameContextHeadless`. |
+| `Stride.Engine` **4.4.0-beta5** | Chosen. Headless window types exist. |
+| Render-to-texture → WriteableBitmap | Preferred present path. Blocked here by Vulkan device creation. Hook is `StrideGpuFrameSource`. |
+| `Game.Run(GameContextHeadless)` | Constructs window, then fails at `GraphicsAdapterFactory`. Probe calls `Exit` on `GameStarted` so a GPU host would not hang in the game loop. |
+| WPF `GameEngineHost` HWND | Windows-only. Not in this cut. |
+| AvaStride | Opposite direction (Avalonia inside the game). |
 
-## What worked
+`NullGameEngine` is still the LevelEditor data backend. The Viewport does not bind GameObjects.
 
-- NuGet is enough. The Stride source tree was **not** vendored.
-- `src/Aether.Stride` constructs `Stride.Engine.Game` and runs `GameContextHeadless`.
-- Headless CI asserts: engine loaded, `Game` constructed, `GameContextHeadless` available, `GameWindowHeadless` created, **in-pane present is false**.
-- Viewport dock pane shows that status. It does not draw a cube or a clear-color swapchain.
+## Next cut
 
-## Blocker
-
-1. **#2741** — no official Avalonia control that hosts a Stride game with input and resize.
-2. **This CI VM** — no usable Vulkan adapter. Device creation fails after the headless window exists. That is an environment limit, not a solved embed.
-
-## Recommended next cut
-
-1. On a Windows machine with D3D: try NativeControlHost + the WPF `GameEngineHost` HWND pattern (`net10.0-windows` extra project; keep ubuntu `net10.0` compiling).
-2. Re-check #2741 / `xplat-editor` for an Avalonia `Game` control. Adopt it when it exists; do not invent a second present stack.
-3. Only then consider replacing `NullGameEngine` with a Stride `IGameEngineProxy`. Not before frames present.
+1. On a machine with a device: implement `StrideGpuFrameSource` (offscreen target → BGRA copy). The Image control stays.
+2. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
+3. Only then replace `NullGameEngine`.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

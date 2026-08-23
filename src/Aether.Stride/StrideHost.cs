@@ -43,6 +43,13 @@ namespace Aether.Stride
                             : null;
                     };
 
+                    EventHandler started = null;
+                    started = (s, e) =>
+                    {
+                        result.GraphicsDeviceCreated = game.GraphicsDevice != null;
+                        game.Exit();
+                    };
+                    Game.GameStarted += started;
                     try
                     {
                         game.Run(new GameContextHeadless(64, 64));
@@ -53,6 +60,10 @@ namespace Aether.Stride
                         result.PresentError = Flatten(ex);
                         result.PresentBlocker = ClassifyPresentBlocker(ex);
                     }
+                    finally
+                    {
+                        Game.GameStarted -= started;
+                    }
                 }
             }
             catch (Exception ex)
@@ -60,7 +71,7 @@ namespace Aether.Stride
                 result.LoadError = Flatten(ex);
             }
 
-            result.InPanePresentAvailable = false;
+            result.StrideGpuPresent = result.GraphicsDeviceCreated;
             result.PresentPath = DescribePresentPath(result);
             result.StatusText = BuildStatus(result);
             return result;
@@ -88,7 +99,7 @@ namespace Aether.Stride
             if (!result.EngineLoaded)
                 return "Stride.Engine did not load.";
             if (result.HeadlessRunCompleted)
-                return "GameContextHeadless Run completed (still not an Avalonia in-pane present).";
+                return "GameContextHeadless Run completed.";
             if (result.WindowCreated)
                 return "GameContextHeadless created GameWindowHeadless, then graphics-device init failed.";
             if (result.GameConstructed)
@@ -105,7 +116,7 @@ namespace Aether.Stride
             text.AppendLine("Game constructed: " + result.GameConstructed);
             text.AppendLine("GameContextHeadless: " + result.HeadlessContextAvailable);
             text.AppendLine("Window: " + (result.WindowTypeName ?? "(none)"));
-            text.AppendLine("In-pane present: no");
+            text.AppendLine("Stride GPU present: " + result.StrideGpuPresent);
             text.AppendLine("Path: " + result.PresentPath);
             if (!string.IsNullOrEmpty(result.PresentError))
                 text.AppendLine("Device error: " + result.PresentError);
@@ -152,7 +163,10 @@ namespace Aether.Stride
 
         public bool HeadlessRunCompleted { get; set; }
 
-        public bool InPanePresentAvailable { get; set; }
+        public bool GraphicsDeviceCreated { get; set; }
+
+        /// <summary>True only when Stride created a real graphics device.</summary>
+        public bool StrideGpuPresent { get; set; }
 
         public string GamesAssembly { get; set; }
 

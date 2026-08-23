@@ -1,0 +1,216 @@
+using System;
+
+namespace Aether.Editor
+{
+    /// <summary>
+    /// Live in-pane presenter. Fills a BGRA buffer every tick.
+    /// Prefers a Stride GPU readback when one exists; otherwise draws a
+    /// software rotating cube + pulsing clear. Same control either way.</summary>
+    public sealed class ViewportPresenter
+    {
+        public const string SoftwarePath = "software-writeablebitmap";
+        public const string StrideRttPath = "stride-rtt";
+
+        public ViewportPresenter()
+        {
+            Resize(320, 180);
+        }
+
+        public string ActivePath
+        {
+            get { return m_path; }
+        }
+
+        public int FrameCount
+        {
+            get { return m_frameCount; }
+        }
+
+        public int Width
+        {
+            get { return m_width; }
+        }
+
+        public int Height
+        {
+            get { return m_height; }
+        }
+
+        public byte[] Pixels
+        {
+            get { return m_pixels; }
+        }
+
+        public bool HasNonEmptyFrame
+        {
+            get
+            {
+                if (m_pixels == null || m_pixels.Length < 4)
+                    return false;
+                for (int i = 0; i < m_pixels.Length; i++)
+                {
+                    if (m_pixels[i] != 0)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        public bool IsLiveControl
+        {
+            get { return m_frameCount > 0 && HasNonEmptyFrame; }
+        }
+
+        /// <summary>Resize the present buffer. Clamped so a dock stretch stays cheap.</summary>
+        public void Resize(int width, int height)
+        {
+            int w = Math.Clamp(width, 64, 1280);
+            int h = Math.Clamp(height, 64, 720);
+            if (w == m_width && h == m_height && m_pixels != null)
+                return;
+            m_width = w;
+            m_height = h;
+            m_pixels = new byte[w * h * 4];
+        }
+
+        /// <summary>Advance one frame. Does not touch the UI thread by itself.</summary>
+        public void Tick(double seconds)
+        {
+            m_time = seconds;
+            if (StrideGpuFrameSource.TryRender(m_pixels, m_width, m_height, seconds))
+                m_path = StrideRttPath;
+            else
+            {
+                SoftwareCube.Render(m_pixels, m_width, m_height, seconds);
+                m_path = SoftwarePath;
+            }
+            m_frameCount++;
+        }
+
+        private string m_path = SoftwarePath;
+        private int m_frameCount;
+        private int m_width;
+        private int m_height;
+        private byte[] m_pixels = Array.Empty<byte>();
+        private double m_time;
+    }
+
+    /// <summary>
+    /// Reserved Stride render-to-texture readback. Returns false until a
+    /// graphics device exists (this Linux CI host fails Vulkan).</summary>
+    internal static class StrideGpuFrameSource
+    {
+        public static bool TryRender(byte[] pixels, int width, int height, double seconds)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>CPU rotating cube + pulsing clear into BGRA8888.</summary>
+    internal static class SoftwareCube
+    {
+        public static void Render(byte[] pixels, int width, int height, double seconds)
+        {
+            float pulse = 0.5f + 0.5f * MathF.Sin((float)seconds * 1.7f);
+            byte bgR = (byte)(8 + 20 * pulse);
+            byte bgG = (byte)(18 + 40 * pulse);
+            byte bgB = (byte)(36 + 50 * pulse);
+            for (int i = 0; i < pixels.Length; i += 4)
+            {
+                pixels[i] = bgB;
+                pixels[i + 1] = bgG;
+                pixels[i + 2] = bgR;
+                pixels[i + 3] = 255;
+            }
+
+            float angle = (float)seconds * 1.1f;
+            float ca = MathF.Cos(angle);
+            float sa = MathF.Sin(angle);
+            float cb = MathF.Cos(angle * 0.6f);
+            float sb = MathF.Sin(angle * 0.6f);
+
+            var pts = new int[8 * 2];
+            for (int i = 0; i < 8; i++)
+            {
+                float x = Cube[i, 0];
+                float y = Cube[i, 1];
+                float z = Cube[i, 2];
+                float xz = x * ca - z * sa;
+                float zz = x * sa + z * ca;
+                float yz = y * cb - zz * sb;
+                float z2 = y * sb + zz * cb;
+                float depth = 3.2f + z2;
+                float px = (xz / depth) * height * 0.55f + width * 0.5f;
+                float py = (-yz / depth) * height * 0.55f + height * 0.5f;
+                pts[i * 2] = (int)px;
+                pts[i * 2 + 1] = (int)py;
+            }
+
+            byte er = (byte)(220 + 35 * pulse);
+            byte eg = (byte)(180 + 40 * pulse);
+            byte eb = (byte)(60 + 20 * pulse);
+            for (int e = 0; e < Edges.GetLength(0); e++)
+            {
+                int a = Edges[e, 0];
+                int b = Edges[e, 1];
+                DrawLine(pixels, width, height,
+                    pts[a * 2], pts[a * 2 + 1],
+                    pts[b * 2], pts[b * 2 + 1],
+                    eb, eg, er);
+            }
+        }
+
+        private static void DrawLine(byte[] pixels, int w, int h, int x0, int y0, int x1, int y1, byte b, byte g, byte r)
+        {
+            int dx = Math.Abs(x1 - x0);
+            int sx = x0 < x1 ? 1 : -1;
+            int dy = -Math.Abs(y1 - y0);
+            int sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy;
+            int x = x0;
+            int y = y0;
+            while (true)
+            {
+                Plot(pixels, w, h, x, y, b, g, r);
+                Plot(pixels, w, h, x + 1, y, b, g, r);
+                if (x == x1 && y == y1)
+                    break;
+                int e2 = 2 * err;
+                if (e2 >= dy)
+                {
+                    err += dy;
+                    x += sx;
+                }
+                if (e2 <= dx)
+                {
+                    err += dx;
+                    y += sy;
+                }
+            }
+        }
+
+        private static void Plot(byte[] pixels, int w, int h, int x, int y, byte b, byte g, byte r)
+        {
+            if ((uint)x >= (uint)w || (uint)y >= (uint)h)
+                return;
+            int i = (y * w + x) * 4;
+            pixels[i] = b;
+            pixels[i + 1] = g;
+            pixels[i + 2] = r;
+            pixels[i + 3] = 255;
+        }
+
+        private static readonly float[,] Cube =
+        {
+            { -1, -1, -1 }, { 1, -1, -1 }, { 1, 1, -1 }, { -1, 1, -1 },
+            { -1, -1, 1 }, { 1, -1, 1 }, { 1, 1, 1 }, { -1, 1, 1 }
+        };
+
+        private static readonly int[,] Edges =
+        {
+            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+            { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+            { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+        };
+    }
+}
