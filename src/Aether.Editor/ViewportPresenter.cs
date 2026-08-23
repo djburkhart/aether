@@ -1,11 +1,15 @@
 using System;
 
+using LevelEditorCore;
+
 namespace Aether.Editor
 {
     /// <summary>
     /// Live in-pane presenter. Fills a BGRA buffer every tick.
     /// Prefers a Stride GPU readback when one exists; otherwise draws a
-    /// software rotating cube + pulsing clear. Same control either way.</summary>
+    /// software rotating cube + pulsing clear. Same control either way.
+    /// When a Level world is bound and a device exists, the GPU path draws
+    /// GameObject placeholders instead of the demo cube.</summary>
     public sealed class ViewportPresenter
     {
         public const string SoftwarePath = "software-writeablebitmap";
@@ -73,18 +77,47 @@ namespace Aether.Editor
             m_pixels = new byte[w * h * 4];
         }
 
-        /// <summary>Advance one frame. Does not touch the UI thread by itself.</summary>
+        /// <summary>
+        /// Optional Level backend. Update is called each tick; never required
+        /// for the software cube path.</summary>
+        public void BindEngine(IGameEngineProxy engine)
+        {
+            m_engine = engine;
+        }
+
+        /// <summary>Advance one frame. Does not touch the UI thread by itself. Never throws.</summary>
         public void Tick(double seconds)
         {
-            m_time = seconds;
-            if (StrideGpuFrameSource.TryRender(m_pixels, m_width, m_height, seconds))
-                m_path = StrideRttPath;
-            else
+            try
             {
-                SoftwareCube.Render(m_pixels, m_width, m_height, seconds);
-                m_path = SoftwarePath;
+                float elapsed = m_frameCount == 0 ? 0f : (float)(seconds - m_time);
+                if (elapsed < 0f)
+                    elapsed = 0f;
+                m_time = seconds;
+                if (m_engine != null)
+                    m_engine.Update(new FrameTime(seconds, elapsed), UpdateType.Editing);
+
+                if (StrideGpuFrameSource.TryRender(m_pixels, m_width, m_height, seconds))
+                    m_path = StrideRttPath;
+                else
+                {
+                    SoftwareCube.Render(m_pixels, m_width, m_height, seconds);
+                    m_path = SoftwarePath;
+                }
+                m_frameCount++;
             }
-            m_frameCount++;
+            catch (Exception)
+            {
+                try
+                {
+                    SoftwareCube.Render(m_pixels, m_width, m_height, seconds);
+                    m_path = SoftwarePath;
+                    m_frameCount++;
+                }
+                catch (Exception)
+                {
+                }
+            }
         }
 
         private string m_path = SoftwarePath;
@@ -93,6 +126,7 @@ namespace Aether.Editor
         private int m_height;
         private byte[] m_pixels = Array.Empty<byte>();
         private double m_time;
+        private IGameEngineProxy? m_engine;
     }
 
     /// <summary>

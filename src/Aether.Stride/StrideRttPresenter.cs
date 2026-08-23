@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -15,8 +16,8 @@ namespace Aether.Stride
 {
     /// <summary>
     /// Long-lived Stride GPU presenter. Creates a <see cref="GraphicsDevice"/>
-    /// without <c>Game.Run</c>, renders a lit cube to an offscreen target, and
-    /// copies BGRA into the Viewport pixel buffer.
+    /// without <c>Game.Run</c>, renders placeholders (or a demo cube) to an
+    /// offscreen target, and copies BGRA into the Viewport pixel buffer.
     /// Returns false (never throws) when the device cannot be created — ubuntu
     /// CI has no Vulkan and is expected to stay on the software cube.</summary>
     public sealed class StrideRttPresenter : IDisposable
@@ -32,6 +33,36 @@ namespace Aether.Stride
         public static bool DeviceReady
         {
             get { return s_instance != null && !s_failed; }
+        }
+
+        /// <summary>How many Level placeholders the next GPU frame will draw.</summary>
+        public static int PlaceholderCount
+        {
+            get
+            {
+                lock (s_gate)
+                    return s_placeholders != null ? s_placeholders.Length : 0;
+            }
+        }
+
+        /// <summary>
+        /// Bind (or clear) Level GameObject placeholders. Drawn instead of the
+        /// demo cube when a device exists and the list is non-empty. Safe with
+        /// no device — the list is ignored until TryRender succeeds.</summary>
+        public static void SetPlaceholders(IReadOnlyList<ScenePlaceholder> placeholders)
+        {
+            lock (s_gate)
+            {
+                if (placeholders == null || placeholders.Count == 0)
+                {
+                    s_placeholders = Array.Empty<ScenePlaceholder>();
+                    return;
+                }
+                var copy = new ScenePlaceholder[placeholders.Count];
+                for (int i = 0; i < placeholders.Count; i++)
+                    copy[i] = placeholders[i];
+                s_placeholders = copy;
+            }
         }
 
         /// <summary>
@@ -158,7 +189,20 @@ namespace Aether.Stride
                 commandList.Clear(m_depth, DepthStencilClearOptions.DepthBuffer);
 
             if (m_effect != null && m_cube != null)
-                DrawCube(width, height, seconds);
+            {
+                try
+                {
+                    ScenePlaceholder[] placeholders = s_placeholders;
+                    if (placeholders != null && placeholders.Length > 0)
+                        DrawPlaceholders(width, height, placeholders);
+                    else
+                        DrawCube(width, height, seconds);
+                }
+                catch (Exception)
+                {
+                    DrawCube(width, height, seconds);
+                }
+            }
 
             commandList.Flush();
 
@@ -190,13 +234,75 @@ namespace Aether.Stride
             var view = Matrix.LookAtRH(new Vector3(0f, 1.15f, 3.05f), Vector3.Zero, Vector3.UnitY);
             var projection = Matrix.PerspectiveFovRH((float)Math.PI / 4f, aspect, 0.1f, 32f);
             var world = Matrix.RotationYawPitchRoll((float)seconds * 0.85f, (float)seconds * 0.35f, 0f);
-            Matrix worldViewProjection = world * view * projection;
+            DrawMesh(world, view, projection, CubeColor);
+        }
 
+        private void DrawPlaceholders(int width, int height, ScenePlaceholder[] placeholders)
+        {
+            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+            for (int i = 0; i < placeholders.Length; i++)
+            {
+                ScenePlaceholder p = placeholders[i];
+                if (p.X < minX) minX = p.X;
+                if (p.Y < minY) minY = p.Y;
+                if (p.Z < minZ) minZ = p.Z;
+                if (p.X > maxX) maxX = p.X;
+                if (p.Y > maxY) maxY = p.Y;
+                if (p.Z > maxZ) maxZ = p.Z;
+            }
+
+            var center = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
+            float radius = Math.Max(Math.Max(maxX - minX, maxY - minY), maxZ - minZ);
+            if (radius < 6f)
+                radius = 6f;
+            var eye = center + new Vector3(radius * 0.95f, radius * 0.65f, radius * 1.15f);
+
+            float aspect = height > 0 ? (float)width / height : 1f;
+            var view = Matrix.LookAtRH(eye, center, Vector3.UnitY);
+            var projection = Matrix.PerspectiveFovRH((float)Math.PI / 4f, aspect, 0.1f, radius * 8f + 32f);
+
+            for (int i = 0; i < placeholders.Length; i++)
+            {
+                ScenePlaceholder p = placeholders[i];
+                float sx = ClampPlaceholderScale(p.Sx);
+                float sy = ClampPlaceholderScale(p.Sy);
+                float sz = ClampPlaceholderScale(p.Sz);
+                var world = Matrix.Scaling(sx, sy, sz) *
+                    Matrix.RotationYawPitchRoll(p.Ry, p.Rx, p.Rz) *
+                    Matrix.Translation(p.X, p.Y, p.Z);
+                DrawMesh(world, view, projection, PlaceholderColor(i));
+            }
+        }
+
+        private void DrawMesh(Matrix world, Matrix view, Matrix projection, Color4 color)
+        {
+            Matrix worldViewProjection = world * view * projection;
             m_effect.Parameters.Set(WorldViewProjectionKey, worldViewProjection);
             m_effect.Parameters.Set(LightDirectionKey, LightDir);
-            m_effect.Parameters.Set(ColorKey, CubeColor);
+            m_effect.Parameters.Set(ColorKey, color);
             m_effect.UpdateEffect(m_device);
             m_cube.Draw(m_context, m_effect);
+        }
+
+        private static float ClampPlaceholderScale(float scale)
+        {
+            if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f)
+                return 0.7f;
+            if (scale < 0.35f)
+                return 0.35f;
+            if (scale > 1.75f)
+                return 1.75f;
+            return scale;
+        }
+
+        private static Color4 PlaceholderColor(int index)
+        {
+            // Same cyan family as the demo cube, slightly varied per object.
+            float hue = (index * 0.17f) % 1f;
+            float g = 0.62f + 0.22f * hue;
+            float b = 0.88f - 0.18f * hue;
+            return new Color4(0.32f + 0.18f * hue, g, b, 1f);
         }
 
         private void EnsureTargets(int width, int height)
@@ -351,6 +457,7 @@ namespace Aether.Stride
         private static StrideRttPresenter s_instance;
         private static bool s_failed;
         private static string s_statusLine;
+        private static ScenePlaceholder[] s_placeholders = Array.Empty<ScenePlaceholder>();
 
         private static readonly Color4 ClearNavy = new Color4(0.04f, 0.06f, 0.16f, 1f);
         private static readonly Color4 CubeColor = new Color4(0.40f, 0.78f, 0.92f, 1f);

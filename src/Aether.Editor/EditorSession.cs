@@ -51,6 +51,11 @@ namespace Aether.Editor
             Script.Ran += OnScriptRan;
             Script.Paused += OnScriptPaused;
             Viewport = new ViewportSession();
+            // DeviceReady is known after the first presenter tick. Bind Level
+            // GameObjects into Stride when a GPU exists; keep NullGameEngine
+            // on ubuntu CI / ErrorIncompatibleDriver.
+            Level.AttachEngine(Aether.Stride.StrideGameEngine.CreateOrFallback());
+            Viewport.BindLevel(Level);
             New();
         }
 
