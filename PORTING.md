@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor). Windows CI is not required; no Windows-only API remains in the compiled set.
 
 ---
 
@@ -554,4 +554,55 @@ File Open detects `.circuit` (or a `circuit` XML root) and routes to the circuit
 dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
   testdata/atf/CircuitEditor/Circuit.xsd testdata/atf/CircuitEditor/Schema.cs \
   http://sony.com/gametech/circuits/1_0 CircuitEditorSample --check
+```
+
+---
+
+# TimelineEditor first slice (schema + adapters + Avalonia timeline)
+
+First port of SonyWWS ATF TimelineEditor into Aether. Data + a usable Avalonia view. Not a sequencer product and not a WinForms port.
+
+## Source
+
+| Item | Value |
+|---|---|
+| Upstream sample | `Samples/TimelineEditor` (single project; there is no TimelineEditorCore / TimelineControls sample) |
+| Upstream interfaces | `Framework/Atf.Gui/Controls/Timelines` |
+| Schema | `Samples/TimelineEditor/schemas/timeline.xsd` (namespace `timeline`) |
+| Sample document | `Samples/TimelineEditor/data/100.timeline` (3 groups, 10 tracks, 60 intervals, 4 markers) |
+| Destination interfaces | `src/Aether.Atf.Timeline` |
+| Destination sample | `src/Aether.Timeline` |
+| Fixtures | `testdata/atf/TimelineEditor/` (`timeline.xsd`, generated `Schema.cs`, `100.timeline`) |
+| Destination TFM | `net10.0` |
+
+The hypothesis held: TimelineEditor’s value is the schema + interval/track/group adapters. The WinForms `TimelineControl` / GDI / D2D renderers are disposable for this slice.
+
+## Cut line
+
+**Ported (data):** `ITimeline` / `IGroup` / `ITrack` / `IInterval` / `IEvent` / `IKey` / `IMarker` / `ITimelineObject`. Sample `Timeline` / `Group` / `Track` / `Interval` / `Key` / `Marker` / `BaseEvent`. SchemaLoader registers those adapters plus `HistoryContext`, `SelectionContext`, and `ObservableCustomTypeDescriptorNodeAdapter`.
+
+**Not ported:** `TimelineControl`, `TimelineRenderer`, `D2dTimelineControl` / `D2dTimelineRenderer`, palette / `NodeTypePaletteItem`, `TimelineValidator`, `TimelineContext`, hierarchical `ITimelineReference` / referenced documents, LevelEditor.
+
+`IEvent.Color` uses inbox `System.Drawing.Color` (`System.Drawing.Primitives`). No `System.Drawing.Common`.
+
+## Timeline view
+
+Looked at maintained Avalonia timeline/gantt controls first:
+
+| Package | Why it was not used for this slice |
+|---|---|
+| Avalonia.Controls.Charts `GanttChart` / `EventTimelineChart` | Avalonia Pro (paid). Binds a DateTime `ItemsSource` VM, not ATF float `start`/`length` on DomNodes. |
+
+This slice draws rows + rectangles on a time scale with a custom `TimelineControl` (`Control.Render`). Click an interval to select it; the existing PropertyGrid binds the interval’s `ICustomTypeDescriptor`. Adding one interval is enough beyond loading `100.timeline`.
+
+File Open detects `.timeline` (or a `timeline` XML root) and routes to the timeline session. UsingDom and Circuit documents stay loaded. Undo/Save follow the last-activated document.
+
+## Headless proof
+
+`--headless-session` loads `100.timeline`, asserts 10 tracks / 60 intervals, selects `Interval`, edits Name through ATF descriptors, undoes, adds one interval, Save As / reopen.
+
+```bash
+dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
+  testdata/atf/TimelineEditor/timeline.xsd testdata/atf/TimelineEditor/Schema.cs \
+  timeline TimelineEditorSample --check
 ```

@@ -11,7 +11,7 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Deterministic>true</Deterministic>
-    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, and property editing.</Description>
+    <Description>Phase 1 Avalonia shell hosting ATF UsingDom, CircuitEditor graph, TimelineEditor, and property editing.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Version>0.1.0</Version>
@@ -35,6 +35,8 @@
     <ProjectReference Include="..\Aether.Plugins\Aether.Plugins.csproj" />
     <ProjectReference Include="..\Aether.Atf.Circuit\Aether.Atf.Circuit.csproj" />
     <ProjectReference Include="..\Aether.Circuit\Aether.Circuit.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Timeline\Aether.Atf.Timeline.csproj" />
+    <ProjectReference Include="..\Aether.Timeline\Aether.Timeline.csproj" />
     <ProjectReference Include="..\..\samples\UsingDom.Document\Aether.Samples.UsingDom.Document.csproj" />
     <ProjectReference Include="..\..\samples\plugins\Aether.SamplePlugin\Aether.SamplePlugin.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
@@ -46,6 +48,8 @@
     <Content Include="..\..\testdata\atf\UsingDom\ogre-adventure-ii.xml" Link="ogre-adventure-ii.xml" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\CircuitEditor\Circuit.xsd" Link="Circuit.xsd" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\testdata\atf\CircuitEditor\Example.circuit" Link="Example.circuit" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\TimelineEditor\timeline.xsd" Link="timeline.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\TimelineEditor\100.timeline" Link="100.timeline" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="PublishSamplePlugin" AfterTargets="Build">

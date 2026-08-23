@@ -35,6 +35,21 @@ namespace Aether.Editor.Dock
     }
 
     /// <summary>
+    /// TimelineEditor tracks/intervals document.</summary>
+    public sealed class TimelineDocument : Document
+    {
+        public TimelineDocument(EditorSession session)
+        {
+            Session = session;
+            Id = "Timeline";
+            Title = "Timeline";
+            CanClose = false;
+        }
+
+        public EditorSession Session { get; }
+    }
+
+    /// <summary>
     /// Properties tool pane.</summary>
     public sealed class PropertiesTool : Tool
     {

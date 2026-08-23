@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Aether.Timeline</RootNamespace>
+    <AssemblyName>Aether.Timeline</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <Description>TimelineEditor sample adapters, schema loader, and DomXml document helpers for Aether.</Description>
+    <Product>Aether Engine</Product>
+    <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\testdata\atf\TimelineEditor\Schema.cs" Link="Schema.cs" />
+    <Content Include="..\..\testdata\atf\TimelineEditor\timeline.xsd" Link="timeline.xsd" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\testdata\atf\TimelineEditor\100.timeline" Link="100.timeline" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Atf.Core\Aether.Atf.Core.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Commands\Aether.Atf.Commands.csproj" />
+    <ProjectReference Include="..\Aether.Atf.PropertyEditing\Aether.Atf.PropertyEditing.csproj" />
+    <ProjectReference Include="..\Aether.Atf.Timeline\Aether.Atf.Timeline.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -37,6 +37,13 @@ jobs:
           testdata/atf/CircuitEditor/Schema.cs
           http://sony.com/gametech/circuits/1_0 CircuitEditorSample --check
 
+      - name: TimelineEditor DomGen smoke
+        run: >
+          dotnet run --no-build -c Release --project src/Aether.Atf.DomGen.Cli --
+          testdata/atf/TimelineEditor/timeline.xsd
+          testdata/atf/TimelineEditor/Schema.cs
+          timeline TimelineEditorSample --check
+
       - name: UsingDom sample
         run: dotnet run --no-build -c Release --project samples/UsingDom
 

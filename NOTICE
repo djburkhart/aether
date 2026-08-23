@@ -33,7 +33,12 @@ is a derivative of the portable ATF circuit graph interfaces and DOM
 adapters (`Framework/Atf.Gui/Controls/Adaptable/Graphs`). `src/Aether.Circuit`
 retargets ATF `Samples/CircuitEditor` adapters, schema loader, and runtime
 module types. `testdata/atf/CircuitEditor` is the ATF Circuit.xsd,
-aether-domgen Schema.cs, and Example.circuit fixture. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
+aether-domgen Schema.cs, and Example.circuit fixture. `src/Aether.Atf.Timeline`
+is a derivative of the portable ATF timeline interfaces
+(`Framework/Atf.Gui/Controls/Timelines`). `src/Aether.Timeline` retargets ATF
+`Samples/TimelineEditor` adapters and schema loader.
+`testdata/atf/TimelineEditor` is the ATF timeline.xsd, aether-domgen Schema.cs,
+and 100.timeline fixture. `src/Aether.Editor` and `src/Aether.Plugins` are new Aether hosting
 code; they are not Sony products. Sony and PlayStation names appear only
 in About / NOTICE to describe ATF origin. Host plugins use
 Microsoft.Extensions.DependencyInjection. ATF Core / Commands /
