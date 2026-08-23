@@ -8,6 +8,8 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 
+using LevelEditorCore;
+
 namespace Aether.Editor.Views
 {
     public partial class ViewportView : UserControl
@@ -19,6 +21,9 @@ namespace Aether.Editor.Views
             DetachedFromVisualTree += OnDetached;
             SizeChanged += OnSizeChanged;
             PointerPressed += OnPointerPressed;
+            PointerMoved += OnPointerMoved;
+            PointerReleased += OnPointerReleased;
+            PointerCaptureLost += OnPointerCaptureLost;
         }
 
         private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -57,8 +62,10 @@ namespace Aether.Editor.Views
         }
 
         /// <summary>
-        /// Left-click the Image: CPU-pick the nearest Level placeholder and
-        /// set LevelSession.SelectedNode. A miss clears selection. Never throws.</summary>
+        /// Left-click the Image: if a GameObject is selected and the click
+        /// hits a translate-gizmo axis, start a History drag. Otherwise
+        /// CPU-pick the nearest Level placeholder. A miss clears selection.
+        /// Never throws.</summary>
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             try
@@ -71,20 +78,87 @@ namespace Aether.Editor.Views
                 if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
                     return;
 
-                Point point = e.GetPosition(FrameImage);
-                double imageW = FrameImage.Bounds.Width;
-                double imageH = FrameImage.Bounds.Height;
-                if (imageW < 1 || imageH < 1)
+                if (!TryImagePixel(e, presenter, out double pixelX, out double pixelY))
                     return;
 
-                double pixelX = point.X / imageW * presenter.Width;
-                double pixelY = point.Y / imageH * presenter.Height;
+                TranslateAxis? axis = session.Level.HitGizmoAt(pixelX, pixelY, presenter.Width, presenter.Height);
+                if (axis.HasValue &&
+                    session.Level.BeginAxisDrag(axis.Value, pixelX, pixelY, presenter.Width, presenter.Height))
+                {
+                    e.Pointer.Capture(this);
+                    e.Handled = true;
+                    return;
+                }
+
                 session.Level.PickAt(pixelX, pixelY, presenter.Width, presenter.Height);
                 e.Handled = true;
             }
             catch (Exception)
             {
             }
+        }
+
+        private void OnPointerMoved(object? sender, PointerEventArgs e)
+        {
+            try
+            {
+                if (DataContext is not EditorSession session || !session.Level.IsAxisDragging)
+                    return;
+                ViewportPresenter? presenter = session.Viewport.Presenter;
+                if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
+                    return;
+                if (!TryImagePixel(e, presenter, out double pixelX, out double pixelY))
+                    return;
+                session.Level.ApplyAxisDrag(pixelX, pixelY, presenter.Width, presenter.Height);
+                e.Handled = true;
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            try
+            {
+                EndDrag(e.Pointer);
+                e.Handled = true;
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void OnPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+        {
+            try
+            {
+                EndDrag(null);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void EndDrag(IPointer? pointer)
+        {
+            if (DataContext is EditorSession session && session.Level.IsAxisDragging)
+                session.Level.EndAxisDrag();
+            pointer?.Capture(null);
+        }
+
+        private bool TryImagePixel(PointerEventArgs e, ViewportPresenter presenter, out double pixelX, out double pixelY)
+        {
+            pixelX = 0;
+            pixelY = 0;
+            Point point = e.GetPosition(FrameImage);
+            double imageW = FrameImage.Bounds.Width;
+            double imageH = FrameImage.Bounds.Height;
+            if (imageW < 1 || imageH < 1)
+                return false;
+            pixelX = point.X / imageW * presenter.Width;
+            pixelY = point.Y / imageH * presenter.Height;
+            return true;
         }
 
         private void Present()

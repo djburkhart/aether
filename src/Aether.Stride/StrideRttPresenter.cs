@@ -269,6 +269,48 @@ namespace Aether.Stride
                     Matrix.Translation(p.X, p.Y, p.Z);
                 DrawMesh(world, view, projection, PlaceholderColor(i));
             }
+
+            DrawTranslateGizmo(view, projection);
+        }
+
+        private void DrawTranslateGizmo(Matrix view, Matrix projection)
+        {
+            try
+            {
+                if (!TranslateGizmo.OverlayVisible || m_cube == null || m_effect == null)
+                    return;
+
+                Sce.Atf.VectorMath.Vec3F origin = TranslateGizmo.OverlayOrigin;
+                DrawGizmoHandle(view, projection, origin, TranslateAxis.X, GizmoRed);
+                DrawGizmoHandle(view, projection, origin, TranslateAxis.Y, GizmoGreen);
+                DrawGizmoHandle(view, projection, origin, TranslateAxis.Z, GizmoBlue);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void DrawGizmoHandle(Matrix view, Matrix projection, Sce.Atf.VectorMath.Vec3F origin, TranslateAxis axis, Color4 color)
+        {
+            Sce.Atf.VectorMath.Vec3F dir = TranslateGizmo.AxisDirection(axis);
+            float cube = ViewportSceneCamera.CubeSize;
+            float shaftScale = (TranslateGizmo.ShaftHalf * 2f) / cube;
+            float shaftLen = TranslateGizmo.AxisLength / cube;
+            var shaftWorld = Matrix.Scaling(
+                    dir.X != 0f ? shaftLen : shaftScale,
+                    dir.Y != 0f ? shaftLen : shaftScale,
+                    dir.Z != 0f ? shaftLen : shaftScale) *
+                Matrix.Translation(
+                    origin.X + dir.X * TranslateGizmo.AxisLength * 0.5f,
+                    origin.Y + dir.Y * TranslateGizmo.AxisLength * 0.5f,
+                    origin.Z + dir.Z * TranslateGizmo.AxisLength * 0.5f);
+            DrawMesh(shaftWorld, view, projection, color);
+
+            float handleScale = (TranslateGizmo.HandleHalf * 2f) / cube;
+            Sce.Atf.VectorMath.Vec3F tip = TranslateGizmo.HandleCenter(origin, axis);
+            var tipWorld = Matrix.Scaling(handleScale, handleScale, handleScale) *
+                Matrix.Translation(tip.X, tip.Y, tip.Z);
+            DrawMesh(tipWorld, view, projection, color);
         }
 
         private void DrawMesh(Matrix world, Matrix view, Matrix projection, Color4 color)
@@ -446,6 +488,9 @@ namespace Aether.Stride
 
         private static readonly Color4 ClearNavy = new Color4(0.04f, 0.06f, 0.16f, 1f);
         private static readonly Color4 CubeColor = new Color4(0.40f, 0.78f, 0.92f, 1f);
+        private static readonly Color4 GizmoRed = new Color4(0.92f, 0.22f, 0.18f, 1f);
+        private static readonly Color4 GizmoGreen = new Color4(0.22f, 0.82f, 0.28f, 1f);
+        private static readonly Color4 GizmoBlue = new Color4(0.22f, 0.42f, 0.95f, 1f);
         private static readonly Vector3 LightDir = Vector3.Normalize(new Vector3(0.35f, 0.85f, 0.40f));
 
         private static readonly ValueParameterKey<Matrix> WorldViewProjectionKey =

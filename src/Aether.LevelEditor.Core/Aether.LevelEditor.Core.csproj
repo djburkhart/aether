@@ -13,7 +13,7 @@
     <Company>Sony Computer Entertainment America LLC</Company>
     <Product>Aether Engine</Product>
     <Authors>Sony Computer Entertainment America LLC; Resolvora LLC</Authors>
-    <Description>Portable net10.0 port of SonyWWS LevelEditorCore interfaces, transform helpers, a no-op game-engine proxy, a CPU bound-scene snapshot, and a GPU-free viewport pick camera. No native renderer, DX11, or WinForms.</Description>
+    <Description>Portable net10.0 port of SonyWWS LevelEditorCore interfaces, transform helpers, a no-op game-engine proxy, a CPU bound-scene snapshot, a GPU-free viewport pick camera, and a CPU translate gizmo. No native renderer, DX11, or WinForms.</Description>
     <AssemblyTitle>Aether.LevelEditor.Core</AssemblyTitle>
     <Version>0.1.0</Version>
   </PropertyGroup>

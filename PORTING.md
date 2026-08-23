@@ -811,12 +811,24 @@ A left click on the Viewport `Image` CPU-picks the nearest GameObject placeholde
 | Headless | `LevelSession.Select(name)`, `PickAt(pixelX, pixelY, width, height)`, `PickAtNdc(ndcX, ndcY, aspect)`. CI projects PointLight through that camera, prints the selection, then a corner miss. |
 | Linux / no GPU | Software WriteableBitmap present path is unchanged. Pick still runs on `BoundLevelScene`. |
 
-Out of scope here: gizmos, transform drag, multi-select, official Avalonia Game control (#2741).
+## Viewport translate gizmo
+
+When a GameObject is selected, a three-axis translate gizmo is drawn at its world translation (RGB = X/Y/Z). The same CPU math drives hit-test, drag, and the software / RTT overlays. No HWND and no #2741 Game control.
+
+| Piece | Behavior |
+|---|---|
+| Draw | Software path: axis lines + tip boxes projected with `ViewportSceneCamera`. RTT path: shaft + tip cubes after the placeholder meshes. |
+| Drag | Left-press on a handle starts `LevelSession.BeginAxisDrag`; move projects the pointer ray onto that world axis and writes `ITransformable.Translation` inside one History transaction; release ends it. |
+| Headless | `BeginAxisDrag(TranslateAxis.X)` + `ApplyAxisDelta(+1.5)` (also `TranslateSelected(dx,dy,dz)`). Prints PointLight translate X before / after +X / after Undo. |
+| Undo | `HistoryContext` restores the pre-drag Translation. Bound scene and Stride placeholders follow. |
+| Linux / no GPU | Present path stays `software-writeablebitmap`. The move still happens; `Tick` / `TryRender` must not throw. |
+
+Out of scope here: rotate/scale gizmos, snap, multi-select, play-in-editor physics, official Avalonia Game control (#2741).
 
 ## Next cut
 
 1. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
-2. Gizmos, play-in-editor physics, and real asset meshes are still out of scope.
+2. Rotate/scale gizmos, play-in-editor physics, and real asset meshes are still out of scope.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

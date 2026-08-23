@@ -2,6 +2,8 @@ using System;
 
 using LevelEditorCore;
 
+using Sce.Atf.VectorMath;
+
 namespace Aether.Editor
 {
     /// <summary>
@@ -192,6 +194,53 @@ namespace Aether.Editor
                     pts[a * 2], pts[a * 2 + 1],
                     pts[b * 2], pts[b * 2 + 1],
                     eb, eg, er);
+            }
+
+            DrawTranslateGizmo(pixels, width, height);
+        }
+
+        /// <summary>
+        /// Overlay the selected-object translate gizmo using the same
+        /// LookAtRH / PerspectiveFovRH pick/RTT camera. Safe when no
+        /// GameObject is selected.</summary>
+        private static void DrawTranslateGizmo(byte[] pixels, int width, int height)
+        {
+            try
+            {
+                if (!TranslateGizmo.OverlayVisible || width < 1 || height < 1)
+                    return;
+
+                ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(TranslateGizmo.OverlayPositions);
+                Vec3F origin = TranslateGizmo.OverlayOrigin;
+                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
+                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);
+                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Z, 230, 70, 50);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private static void DrawGizmoAxis(
+            byte[] pixels, int width, int height, ViewportCameraFrame frame,
+            Vec3F origin, TranslateAxis axis, byte b, byte g, byte r)
+        {
+            Vec3F tip = TranslateGizmo.HandleCenter(origin, axis);
+            float x0, y0, x1, y1;
+            if (!ViewportSceneCamera.TryProject(frame, origin, width, height, out x0, out y0))
+                return;
+            if (!ViewportSceneCamera.TryProject(frame, tip, width, height, out x1, out y1))
+                return;
+            DrawLine(pixels, width, height, (int)x0, (int)y0, (int)x1, (int)y1, b, g, r);
+            FillBox(pixels, width, height, (int)x1, (int)y1, 3, b, g, r);
+        }
+
+        private static void FillBox(byte[] pixels, int w, int h, int cx, int cy, int half, byte b, byte g, byte r)
+        {
+            for (int y = cy - half; y <= cy + half; y++)
+            {
+                for (int x = cx - half; x <= cx + half; x++)
+                    Plot(pixels, w, h, x, y, b, g, r);
             }
         }
 

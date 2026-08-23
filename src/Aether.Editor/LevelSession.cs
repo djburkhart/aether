@@ -46,6 +46,12 @@ namespace Aether.Editor
 
         public Game Game { get; private set; } = null!;
 
+        /// <summary>
+        /// Documented headless +X delta applied by
+        /// <see cref="BeginAxisDrag(TranslateAxis)"/> +
+        /// <see cref="ApplyAxisDelta"/>.</summary>
+        public const float DocumentedTranslateDeltaX = 1.5f;
+
         public HistoryContext History { get; private set; } = null!;
 
         public SelectionContext Selection { get; private set; } = null!;
@@ -127,6 +133,10 @@ namespace Aether.Editor
                 else
                     Selection.Selection.Clear();
 
+                if (m_drag != null && (value == null || !object.ReferenceEquals(value.Node, m_drag.Node)))
+                    CancelAxisDrag();
+
+                PushGizmo();
                 OnPropertyChanged(nameof(StatusText));
             }
         }
@@ -266,6 +276,210 @@ namespace Aether.Editor
             {
                 SelectedNode = null;
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// CPU hit-test of the selected object's translate gizmo. Null when
+        /// nothing is selected or the ray misses every axis handle.</summary>
+        public TranslateAxis? HitGizmoAt(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (!TrySelectedOrigin(out Vec3F origin))
+                    return null;
+                ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(BoundScene);
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(frame, (float)pixelX, (float)pixelY, width, height);
+                TranslateAxis axis;
+                if (!TranslateGizmo.Hit(origin, ray, out axis))
+                    return null;
+                return axis;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// True when a translate-axis drag is open (History transaction in
+        /// progress). Headless and the Viewport mouse path share this.</summary>
+        public bool IsAxisDragging
+        {
+            get { return m_drag != null; }
+        }
+
+        /// <summary>
+        /// Start a translate drag on <paramref name="axis"/>. Records the
+        /// current Translation and opens one History transaction. Used by
+        /// headless <see cref="ApplyAxisDelta"/> (no mouse).</summary>
+        public bool BeginAxisDrag(TranslateAxis axis)
+        {
+            try
+            {
+                IGameObject? gob = SelectedGameObject();
+                if (gob == null || !CanTranslate(gob))
+                    return false;
+                CancelAxisDrag();
+                m_drag = new AxisDrag(
+                    gob,
+                    gob.As<DomNode>()!,
+                    axis,
+                    gob.Translation,
+                    SelectedWorldTranslation(gob),
+                    ViewportSceneCamera.ComputeFrame(BoundScene),
+                    0f,
+                    hasStartT: false);
+                History.Begin("Translate");
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelAxisDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start a translate drag from an image-space press. Projects that
+        /// pixel onto <paramref name="axis"/> so later
+        /// <see cref="ApplyAxisDrag"/> writes Translation along the axis.</summary>
+        public bool BeginAxisDrag(TranslateAxis axis, double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (!BeginAxisDrag(axis) || m_drag == null)
+                    return false;
+
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float startT;
+                if (!TranslateGizmo.TryProjectOntoAxis(
+                    ray, m_drag.WorldOrigin, TranslateGizmo.AxisDirection(axis), m_drag.Frame.Eye, out startT))
+                {
+                    CancelAxisDrag();
+                    return false;
+                }
+                m_drag.StartT = startT;
+                m_drag.HasStartT = true;
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelAxisDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Documented headless move: add <paramref name="worldDelta"/> along
+        /// the drag axis (world space) and write local
+        /// <see cref="ITransformable.Translation"/>. Requires
+        /// <see cref="BeginAxisDrag(TranslateAxis)"/>.</summary>
+        public bool ApplyAxisDelta(float worldDelta)
+        {
+            try
+            {
+                if (m_drag == null)
+                    return false;
+                Vec3F world = TranslateGizmo.AxisDirection(m_drag.Axis) * worldDelta;
+                m_drag.GameObject.Translation = ApplyWorldDelta(
+                    m_drag.GameObject, m_drag.StartTranslation, world);
+                SyncBoundScene();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pointer-move half of an axis drag. Projects the pixel onto the
+        /// captured axis and writes Translation. CPU only.</summary>
+        public bool ApplyAxisDrag(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (m_drag == null || !m_drag.HasStartT)
+                    return false;
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float t;
+                if (!TranslateGizmo.TryProjectOntoAxis(
+                    ray,
+                    m_drag.WorldOrigin,
+                    TranslateGizmo.AxisDirection(m_drag.Axis),
+                    m_drag.Frame.Eye,
+                    out t))
+                {
+                    return false;
+                }
+                float delta = t - m_drag.StartT;
+                Vec3F world = TranslateGizmo.AxisDirection(m_drag.Axis) * delta;
+                m_drag.GameObject.Translation = ApplyWorldDelta(
+                    m_drag.GameObject, m_drag.StartTranslation, world);
+                SyncBoundScene();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Commit the open translate transaction (or cancel if Translation
+        /// did not change). Undo restores the pre-drag position.</summary>
+        public bool EndAxisDrag()
+        {
+            try
+            {
+                if (m_drag == null)
+                    return false;
+
+                bool changed = !NearlyEqual(m_drag.GameObject.Translation, m_drag.StartTranslation);
+                if (History.InTransaction)
+                {
+                    if (changed)
+                        History.End();
+                    else
+                        History.Cancel();
+                }
+                m_drag = null;
+                SyncBoundScene();
+                NotifyHistoryCommands();
+                NotifyFileState();
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelAxisDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Move the selected GameObject by a world-space delta in one History
+        /// transaction. Same write as a finished axis drag.</summary>
+        public bool TranslateSelected(float dx, float dy, float dz)
+        {
+            try
+            {
+                IGameObject? gob = SelectedGameObject();
+                if (gob == null || !CanTranslate(gob))
+                    return false;
+                Vec3F next = ApplyWorldDelta(gob, gob.Translation, new Vec3F(dx, dy, dz));
+                History.DoTransaction(
+                    () => { gob.Translation = next; },
+                    "Translate");
+                NotifyHistoryCommands();
+                NotifyFileState();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -493,6 +707,7 @@ namespace Aether.Editor
             }
 
             PushPlaceholders();
+            PushGizmo();
             OnPropertyChanged(nameof(SceneBackend));
         }
 
@@ -531,9 +746,154 @@ namespace Aether.Editor
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
+        private IGameObject? SelectedGameObject()
+        {
+            if (m_selectedNode == null)
+                return null;
+            return m_selectedNode.Node.As<IGameObject>();
+        }
+
+        private static bool CanTranslate(IGameObject gob)
+        {
+            if (gob == null)
+                return false;
+            if (gob.IsLocked)
+                return false;
+            return (gob.TransformationType & TransformationTypes.Translation) != 0;
+        }
+
+        private bool TrySelectedOrigin(out Vec3F origin)
+        {
+            origin = Vec3F.ZeroVector;
+            IGameObject? gob = SelectedGameObject();
+            if (gob == null)
+                return false;
+            origin = SelectedWorldTranslation(gob);
+            return true;
+        }
+
+        private Vec3F SelectedWorldTranslation(IGameObject gob)
+        {
+            BoundSceneObject? found = BoundScene.Find(gob.Name);
+            if (found != null)
+                return found.WorldTranslation;
+            return gob.Translation;
+        }
+
+        private void PushGizmo()
+        {
+            try
+            {
+                var positions = new Vec3F[BoundScene.Count];
+                for (int i = 0; i < BoundScene.Count; i++)
+                    positions[i] = BoundScene.Objects[i].WorldTranslation;
+
+                Vec3F? origin = null;
+                IGameObject? gob = SelectedGameObject();
+                if (gob != null)
+                    origin = SelectedWorldTranslation(gob);
+                TranslateGizmo.SetOverlay(positions, origin);
+            }
+            catch (Exception)
+            {
+                TranslateGizmo.ClearOverlay();
+            }
+        }
+
+        private void CancelAxisDrag()
+        {
+            try
+            {
+                if (History != null && History.InTransaction)
+                    History.Cancel();
+            }
+            catch (Exception)
+            {
+            }
+            m_drag = null;
+        }
+
+        private static Vec3F ApplyWorldDelta(IGameObject gob, Vec3F startLocal, Vec3F worldDelta)
+        {
+            Vec3F localDelta = worldDelta;
+            try
+            {
+                DomNode? node = gob.As<DomNode>();
+                Matrix4F? parentWorld = ParentWorld(node);
+                if (parentWorld != null)
+                {
+                    var inv = new Matrix4F();
+                    inv.Invert(parentWorld);
+                    inv.TransformVector(worldDelta, out localDelta);
+                }
+            }
+            catch (Exception)
+            {
+                localDelta = worldDelta;
+            }
+            return startLocal + localDelta;
+        }
+
+        private static Matrix4F? ParentWorld(DomNode? node)
+        {
+            if (node == null)
+                return null;
+            var world = new Matrix4F();
+            bool any = false;
+            foreach (DomNode ancestor in node.Ancestry)
+            {
+                ITransformable? xform = ancestor.As<ITransformable>();
+                if (xform == null)
+                    continue;
+                world.Mul(world, xform.Transform);
+                any = true;
+            }
+            return any ? world : null;
+        }
+
+        private static bool NearlyEqual(Vec3F a, Vec3F b)
+        {
+            return Math.Abs(a.X - b.X) < 1e-5f &&
+                Math.Abs(a.Y - b.Y) < 1e-5f &&
+                Math.Abs(a.Z - b.Z) < 1e-5f;
+        }
+
         private LevelNodeItem? m_selectedNode;
         private string? m_filePath;
         private bool m_historyHooked;
+        private AxisDrag? m_drag;
+
+        private sealed class AxisDrag
+        {
+            public AxisDrag(
+                IGameObject gameObject,
+                DomNode node,
+                TranslateAxis axis,
+                Vec3F startTranslation,
+                Vec3F worldOrigin,
+                ViewportCameraFrame frame,
+                float startT,
+                bool hasStartT)
+            {
+                GameObject = gameObject;
+                Node = node;
+                Axis = axis;
+                StartTranslation = startTranslation;
+                WorldOrigin = worldOrigin;
+                Frame = frame;
+                StartT = startT;
+                HasStartT = hasStartT;
+            }
+
+            public IGameObject GameObject { get; }
+            public DomNode Node { get; }
+            public TranslateAxis Axis { get; }
+            public Vec3F StartTranslation { get; }
+            public Vec3F WorldOrigin { get; }
+            public ViewportCameraFrame Frame { get; }
+            public float StartT { get; set; }
+            public bool HasStartT { get; set; }
+        }
     }
 
     public sealed class LevelNodeItem
