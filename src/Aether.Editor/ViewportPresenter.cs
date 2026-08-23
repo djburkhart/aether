@@ -196,14 +196,14 @@ namespace Aether.Editor
                     eb, eg, er);
             }
 
-            DrawTranslateGizmo(pixels, width, height);
+            DrawGizmo(pixels, width, height);
         }
 
         /// <summary>
-        /// Overlay the selected-object translate gizmo using the shared
-        /// ViewportCamera (same LookAt as pick/RTT). Safe when no
-        /// GameObject is selected.</summary>
-        private static void DrawTranslateGizmo(byte[] pixels, int width, int height)
+        /// Overlay the selected-object gizmo (translate / rotate / scale)
+        /// using the shared ViewportCamera. Safe when no GameObject is
+        /// selected.</summary>
+        private static void DrawGizmo(byte[] pixels, int width, int height)
         {
             try
             {
@@ -212,9 +212,24 @@ namespace Aether.Editor
 
                 ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
                 Vec3F origin = TranslateGizmo.OverlayOrigin;
-                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
-                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);
-                DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Z, 230, 70, 50);
+                switch (TranslateGizmo.OverlayMode)
+                {
+                    case GizmoMode.Rotate:
+                        DrawRotateRing(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
+                        DrawRotateRing(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);
+                        DrawRotateRing(pixels, width, height, frame, origin, TranslateAxis.Z, 230, 70, 50);
+                        break;
+                    case GizmoMode.Scale:
+                        DrawScaleAxis(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
+                        DrawScaleAxis(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);
+                        DrawScaleAxis(pixels, width, height, frame, origin, TranslateAxis.Z, 230, 70, 50);
+                        break;
+                    default:
+                        DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
+                        DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);
+                        DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Z, 230, 70, 50);
+                        break;
+                }
             }
             catch (Exception)
             {
@@ -233,6 +248,47 @@ namespace Aether.Editor
                 return;
             DrawLine(pixels, width, height, (int)x0, (int)y0, (int)x1, (int)y1, b, g, r);
             FillBox(pixels, width, height, (int)x1, (int)y1, 3, b, g, r);
+        }
+
+        private static void DrawScaleAxis(
+            byte[] pixels, int width, int height, ViewportCameraFrame frame,
+            Vec3F origin, TranslateAxis axis, byte b, byte g, byte r)
+        {
+            Vec3F tip = ScaleGizmo.HandleCenter(origin, axis);
+            float x0, y0, x1, y1;
+            if (!ViewportSceneCamera.TryProject(frame, origin, width, height, out x0, out y0))
+                return;
+            if (!ViewportSceneCamera.TryProject(frame, tip, width, height, out x1, out y1))
+                return;
+            DrawLine(pixels, width, height, (int)x0, (int)y0, (int)x1, (int)y1, b, g, r);
+            FillBox(pixels, width, height, (int)x1, (int)y1, 4, b, g, r);
+        }
+
+        private static void DrawRotateRing(
+            byte[] pixels, int width, int height, ViewportCameraFrame frame,
+            Vec3F origin, TranslateAxis axis, byte b, byte g, byte r)
+        {
+            int n = RotateGizmo.RingSegments;
+            float step = (float)(Math.PI * 2.0 / n);
+            int prevX = 0, prevY = 0;
+            bool havePrev = false;
+            for (int i = 0; i <= n; i++)
+            {
+                Vec3F p = RotateGizmo.RingPoint(origin, axis, (i % n) * step);
+                float px, py;
+                if (!ViewportSceneCamera.TryProject(frame, p, width, height, out px, out py))
+                {
+                    havePrev = false;
+                    continue;
+                }
+                int x = (int)px;
+                int y = (int)py;
+                if (havePrev)
+                    DrawLine(pixels, width, height, prevX, prevY, x, y, b, g, r);
+                prevX = x;
+                prevY = y;
+                havePrev = true;
+            }
         }
 
         private static void FillBox(byte[] pixels, int w, int h, int cx, int cy, int half, byte b, byte g, byte r)

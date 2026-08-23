@@ -805,25 +805,27 @@ A left click on the Viewport `Image` CPU-picks the nearest GameObject placeholde
 
 | Piece | Behavior |
 |---|---|
-| Camera | Shared `ViewportCamera` (yaw / pitch / distance / target) → LookAtRH / PerspectiveFovRH. Same instance `StrideRttPresenter.DrawPlaceholders` and the translate gizmo use (`ViewportSceneCamera.Current`). |
+| Camera | Shared `ViewportCamera` (yaw / pitch / distance / target) → LookAtRH / PerspectiveFovRH. Same instance `StrideRttPresenter.DrawPlaceholders` and the transform gizmos use (`ViewportSceneCamera.Current`). |
 | Hit | Ray vs axis-aligned cube at each `BoundSceneObject.WorldTranslation` (half-extents = 1.15 cube × clamped scale). Nearest hit wins. |
 | Miss | Clears `SelectedNode` (and the property grid when Level is active). Documented; not “leave selection”. |
 | Headless | `LevelSession.Select(name)`, `PickAt(pixelX, pixelY, width, height)`, `PickAtNdc(ndcX, ndcY, aspect)`. CI projects PointLight through that camera, prints the selection, then a corner miss. |
 | Linux / no GPU | Software WriteableBitmap present path is unchanged. Pick still runs on `BoundLevelScene`. |
 
-## Viewport translate gizmo
+## Viewport transform gizmos (translate / rotate / scale)
 
-When a GameObject is selected, a three-axis translate gizmo is drawn at its world translation (RGB = X/Y/Z). The same CPU math drives hit-test, drag, and the software / RTT overlays. No HWND and no #2741 Game control.
+When a GameObject is selected, a gizmo is drawn at its world translation (RGB = X/Y/Z). Mode is `GizmoMode` on `LevelSession`: **W** translate, **E** rotate, **R** scale (Viewport toolbar buttons too). The same CPU math drives hit-test, drag, and the software / RTT overlays. No HWND and no #2741 Game control.
 
 | Piece | Behavior |
 |---|---|
-| Draw | Software path: axis lines + tip boxes projected with `ViewportSceneCamera`. RTT path: shaft + tip cubes after the placeholder meshes. |
-| Drag | Left-press on a handle starts `LevelSession.BeginAxisDrag`; move projects the pointer ray onto that world axis and writes `ITransformable.Translation` inside one History transaction; release ends it. |
-| Headless | `BeginAxisDrag(TranslateAxis.X)` + `ApplyAxisDelta(+1.5)` (also `TranslateSelected(dx,dy,dz)`). Prints PointLight translate X before / after +X / after Undo. |
-| Undo | `HistoryContext` restores the pre-drag Translation. Bound scene and Stride placeholders follow. |
-| Linux / no GPU | Present path stays `software-writeablebitmap`. The move still happens; `Tick` / `TryRender` must not throw. |
+| Translate | Three axis handles. Left-press starts `LevelSession.BeginAxisDrag`; move projects the pointer ray onto that world axis and writes `ITransformable.Translation` inside one History transaction. |
+| Rotate | Three axis rings (plane ⟂ axis). Left-press starts `BeginRotateDrag`; move projects onto that plane and writes Euler `ITransformable.Rotation` (radians). |
+| Scale | Three axis handles. Left-press starts `BeginScaleDrag`; move projects onto that axis and writes `ITransformable.Scale` (additive on the dragged component). |
+| Flags | LightTest `PointLight` only has `TransformationTypes.Translation`. Rotate/scale begin ORs `Rotation` / `Scale` onto `TransformationType` inside the same History transaction so the `ITransformable` setters accept the write. Undo restores the flags too. |
+| Headless | `BeginAxisDrag(X)` + `ApplyAxisDelta(+1.5)`; `BeginRotateDrag(Y)` + `ApplyRotateDelta(+π/4)`; `BeginScaleDrag(X)` + `ApplyScaleDelta(+0.5)`. Prints PointLight translate X / rotate Y / scale X before / after / after Undo. |
+| Undo | `HistoryContext` restores the pre-drag Translation / Rotation / Scale. Bound scene and Stride placeholders follow. |
+| Linux / no GPU | Present path stays `software-writeablebitmap`. The edit still happens; `Tick` / `TryRender` must not throw. |
 
-Out of scope here: rotate/scale gizmos, snap, multi-select, play-in-editor physics, official Avalonia Game control (#2741).
+Out of scope here: snap, multi-select, local-vs-world toggle, play-in-editor physics, official Avalonia Game control (#2741).
 
 ## Viewport camera (orbit / pan / zoom)
 
@@ -839,12 +841,12 @@ One editable camera. `ViewportSceneCamera.Current` is a `ViewportCamera` (target
 
 Headless prints the default camera (target / yaw / pitch / distance / eye), applies the documented orbit + zoom, prints the new camera, and checks that PointLight's projected pixel moved (old pixel is a miss or a different hit). Then it picks PointLight at the new pixel and repeats gizmo +X / Undo.
 
-Out of scope here: WASD fly-cam, perspective/ortho toggle, camera bookmarks, rotate/scale gizmos, official Avalonia Game control (#2741).
+Out of scope here: WASD fly-cam, perspective/ortho toggle, camera bookmarks, official Avalonia Game control (#2741).
 
 ## Next cut
 
 1. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
-2. Rotate/scale gizmos, play-in-editor physics, and real asset meshes are still out of scope.
+2. Snap, multi-select, local-vs-world toggle, play-in-editor physics, and real asset meshes are still out of scope.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

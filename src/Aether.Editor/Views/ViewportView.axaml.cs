@@ -26,6 +26,7 @@ namespace Aether.Editor.Views
             PointerReleased += OnPointerReleased;
             PointerCaptureLost += OnPointerCaptureLost;
             PointerWheelChanged += OnPointerWheelChanged;
+            KeyDown += OnKeyDown;
         }
 
         private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -65,8 +66,9 @@ namespace Aether.Editor.Views
 
         /// <summary>
         /// Camera: right-drag or alt-left orbits; middle-drag or shift-right
-        /// pans. Left-click: gizmo axis starts a History drag, otherwise
-        /// CPU-pick. A miss clears selection. Never throws.</summary>
+        /// pans. Left-click: current-mode gizmo starts a History drag,
+        /// otherwise CPU-pick. W / E / R switch translate / rotate / scale.
+        /// A miss clears selection. Never throws.</summary>
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             try
@@ -95,12 +97,12 @@ namespace Aether.Editor.Views
                 if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
                     return;
 
+                Focus();
                 if (!TryImagePixel(e, presenter, out double pixelX, out double pixelY))
                     return;
 
                 TranslateAxis? axis = session.Level.HitGizmoAt(pixelX, pixelY, presenter.Width, presenter.Height);
-                if (axis.HasValue &&
-                    session.Level.BeginAxisDrag(axis.Value, pixelX, pixelY, presenter.Width, presenter.Height))
+                if (axis.HasValue && BeginGizmoDrag(session, axis.Value, pixelX, pixelY, presenter.Width, presenter.Height))
                 {
                     m_drag = CameraDragKind.Gizmo;
                     e.Pointer.Capture(this);
@@ -144,14 +146,14 @@ namespace Aether.Editor.Views
                     return;
                 }
 
-                if (!session.Level.IsAxisDragging)
+                if (!session.Level.IsGizmoDragging)
                     return;
                 ViewportPresenter? presenter = session.Viewport.Presenter;
                 if (presenter == null || presenter.Width < 1 || presenter.Height < 1)
                     return;
                 if (!TryImagePixel(e, presenter, out double pixelX, out double pixelY))
                     return;
-                session.Level.ApplyAxisDrag(pixelX, pixelY, presenter.Width, presenter.Height);
+                ApplyGizmoDrag(session, pixelX, pixelY, presenter.Width, presenter.Height);
                 e.Handled = true;
             }
             catch (Exception)
@@ -208,10 +210,88 @@ namespace Aether.Editor.Views
 
         private void EndDrag(IPointer? pointer)
         {
-            if (DataContext is EditorSession session && session.Level.IsAxisDragging)
-                session.Level.EndAxisDrag();
+            if (DataContext is EditorSession session && session.Level.IsGizmoDragging)
+                session.Level.EndGizmoDrag();
             m_drag = CameraDragKind.None;
             pointer?.Capture(null);
+        }
+
+        private void OnKeyDown(object? sender, KeyEventArgs e)
+        {
+            try
+            {
+                if (DataContext is not EditorSession session)
+                    return;
+                if (e.KeyModifiers != KeyModifiers.None)
+                    return;
+                if (e.Key == Key.W)
+                {
+                    session.Level.SetGizmoMode(GizmoMode.Translate);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.E)
+                {
+                    session.Level.SetGizmoMode(GizmoMode.Rotate);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.R)
+                {
+                    session.Level.SetGizmoMode(GizmoMode.Scale);
+                    e.Handled = true;
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void OnGizmoTranslate(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session)
+                session.Level.SetGizmoMode(GizmoMode.Translate);
+        }
+
+        private void OnGizmoRotate(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session)
+                session.Level.SetGizmoMode(GizmoMode.Rotate);
+        }
+
+        private void OnGizmoScale(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (DataContext is EditorSession session)
+                session.Level.SetGizmoMode(GizmoMode.Scale);
+        }
+
+        private static bool BeginGizmoDrag(
+            EditorSession session, TranslateAxis axis, double pixelX, double pixelY, int width, int height)
+        {
+            switch (session.Level.GizmoMode)
+            {
+                case GizmoMode.Rotate:
+                    return session.Level.BeginRotateDrag(axis, pixelX, pixelY, width, height);
+                case GizmoMode.Scale:
+                    return session.Level.BeginScaleDrag(axis, pixelX, pixelY, width, height);
+                default:
+                    return session.Level.BeginAxisDrag(axis, pixelX, pixelY, width, height);
+            }
+        }
+
+        private static void ApplyGizmoDrag(
+            EditorSession session, double pixelX, double pixelY, int width, int height)
+        {
+            switch (session.Level.GizmoMode)
+            {
+                case GizmoMode.Rotate:
+                    session.Level.ApplyRotateDrag(pixelX, pixelY, width, height);
+                    break;
+                case GizmoMode.Scale:
+                    session.Level.ApplyScaleDrag(pixelX, pixelY, width, height);
+                    break;
+                default:
+                    session.Level.ApplyAxisDrag(pixelX, pixelY, width, height);
+                    break;
+            }
         }
 
         private bool TryImagePixel(PointerEventArgs e, ViewportPresenter presenter, out double pixelX, out double pixelY)

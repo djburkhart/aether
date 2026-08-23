@@ -1,6 +1,6 @@
 // Copyright 2026 Resolvora LLC / Aether Engine contributors.
 // Editable Viewport orbit camera. CPU only: yaw / pitch / distance / target
-// produce the LookAtRH eye that ViewportSceneCamera, TranslateGizmo, and
+// produce the LookAtRH eye that ViewportSceneCamera, the transform gizmos, and
 // StrideRttPresenter all read. No GraphicsDevice, no mouse API.
 
 using System;

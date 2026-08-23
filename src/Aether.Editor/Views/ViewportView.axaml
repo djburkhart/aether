@@ -7,6 +7,21 @@
            HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
            IsHitTestVisible="True" />
+    <StackPanel Orientation="Horizontal"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="8,8,0,0"
+                Spacing="4">
+      <Button Content="Move (W)"
+              Padding="8,2"
+              Click="OnGizmoTranslate" />
+      <Button Content="Rotate (E)"
+              Padding="8,2"
+              Click="OnGizmoRotate" />
+      <Button Content="Scale (R)"
+              Padding="8,2"
+              Click="OnGizmoScale" />
+    </StackPanel>
     <Border VerticalAlignment="Bottom"
             HorizontalAlignment="Stretch"
             Background="#99000000"

@@ -35,7 +35,8 @@ namespace Aether.Editor
     /// Constructs the same EditorSession the window hosts and proves selection,
     /// ATF descriptors, DomNode mutation, HistoryContext undo,
     /// DomXml Open/Save round-trip, Viewport CPU pick of Level placeholders,
-    /// a headless translate-gizmo +X / Undo of PointLight, and a documented
+    /// a headless translate-gizmo +X / Undo of PointLight, a documented
+    /// rotate-gizmo +Y / Undo and scale-gizmo +X / Undo, and a documented
     /// Viewport camera orbit that moves PointLight's pick pixel.</summary>
     internal static class HeadlessSession
     {
@@ -616,6 +617,14 @@ namespace Aether.Editor
                 return 73;
             }
             session.Level.SelectedNode = light;
+            int rotateCode = ProveViewportRotate(session, "load");
+            if (rotateCode != 0)
+                return rotateCode;
+
+            int scaleCode = ProveViewportScale(session, "load");
+            if (scaleCode != 0)
+                return scaleCode;
+
             int translateCode = ProveViewportTranslate(session, "load");
             if (translateCode != 0)
                 return translateCode;
@@ -1149,6 +1158,14 @@ namespace Aether.Editor
             if (pickCode != 0)
                 return pickCode;
 
+            int rotateCode = ProveViewportRotate(session, "viewport ticks");
+            if (rotateCode != 0)
+                return rotateCode;
+
+            int scaleCode = ProveViewportScale(session, "viewport ticks");
+            if (scaleCode != 0)
+                return scaleCode;
+
             int translateCode = ProveViewportTranslate(session, "viewport ticks");
             if (translateCode != 0)
                 return translateCode;
@@ -1158,6 +1175,309 @@ namespace Aether.Editor
                 return cameraCode;
 
             Console.WriteLine("headless stride ok");
+            return 0;
+        }
+
+        /// <summary>
+        /// After LightTest load: select PointLight, hit-test the +Y ring,
+        /// then BeginRotateDrag(Y) + ApplyRotateDelta(+π/4). Prints Rotation Y
+        /// before / after / after Undo. Same CPU path as a Viewport pointer
+        /// drag — no mouse, no GPU. Tick must not throw.</summary>
+        private static int ProveViewportRotate(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw during rotate after {0}: {1}", afterLabel, ex.Message);
+                return 160;
+            }
+
+            if (!session.Level.Select("PointLight"))
+            {
+                Console.Error.WriteLine("Error: LevelSession.Select(PointLight) failed before gizmo rotate after {0}.", afterLabel);
+                return 161;
+            }
+            if (!session.Level.SetGizmoMode(GizmoMode.Rotate))
+            {
+                Console.Error.WriteLine("Error: SetGizmoMode(Rotate) failed after {0}.", afterLabel);
+                return 162;
+            }
+
+            LevelNodeItem? lightItem = session.Level.SelectedNode;
+            var gob = lightItem != null ? lightItem.Node.As<IGameObject>() : null;
+            if (gob == null)
+            {
+                Console.Error.WriteLine("Error: PointLight did not adapt to IGameObject for gizmo rotate after {0}.", afterLabel);
+                return 163;
+            }
+
+            float before = gob.Rotation.Y;
+            Console.WriteLine("PointLight rotate Y before: {0}", before);
+            Console.WriteLine(
+                "viewport gizmo path: LevelSession.BeginRotateDrag(Y) + ApplyRotateDelta(+{0}) (CPU, no mouse/GPU)",
+                LevelSession.DocumentedRotateDeltaY);
+            Console.WriteLine("viewport gizmo mode: rotate (W translate / E rotate / R scale)");
+
+            BoundSceneObject? light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: bound scene missing PointLight for rotate hit after {0}.", afterLabel);
+                return 164;
+            }
+
+            ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
+            Vec3F sample = RotateGizmo.HitSample(light.WorldTranslation, TranslateAxis.Y);
+            float pixelX, pixelY;
+            if (ViewportSceneCamera.TryProject(frame, sample, presenter.Width, presenter.Height, out pixelX, out pixelY))
+            {
+                TranslateAxis? hit = session.Level.HitGizmoAt(pixelX, pixelY, presenter.Width, presenter.Height);
+                Console.WriteLine("viewport gizmo hit at +Y ring: {0}", hit.HasValue ? hit.Value.ToString() : "(none)");
+                if (hit != TranslateAxis.Y)
+                {
+                    Console.Error.WriteLine("Error: projected +Y ring after {0} did not hit TranslateAxis.Y.", afterLabel);
+                    return 165;
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Error: could not project the +Y rotate ring after {0}.", afterLabel);
+                return 166;
+            }
+
+            if (!session.Level.BeginRotateDrag(TranslateAxis.Y))
+            {
+                Console.Error.WriteLine("Error: BeginRotateDrag(Y) failed after {0}.", afterLabel);
+                return 167;
+            }
+            if (!session.Level.ApplyRotateDelta(LevelSession.DocumentedRotateDeltaY))
+            {
+                Console.Error.WriteLine("Error: ApplyRotateDelta(+Y) failed after {0}.", afterLabel);
+                session.Level.EndRotateDrag();
+                return 168;
+            }
+            if (!session.Level.EndRotateDrag())
+            {
+                Console.Error.WriteLine("Error: EndRotateDrag failed after {0}.", afterLabel);
+                return 169;
+            }
+
+            float after = gob.Rotation.Y;
+            Console.WriteLine("PointLight rotate Y after +Y: {0}", after);
+            if (Math.Abs(after - (before + LevelSession.DocumentedRotateDeltaY)) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: PointLight rotate Y after gizmo +Y should be {0}, got {1}.",
+                    before + LevelSession.DocumentedRotateDeltaY,
+                    after);
+                return 170;
+            }
+
+            BoundSceneObject? bound = session.Level.BoundScene.Find("PointLight");
+            if (bound == null || Math.Abs(bound.Rotation.Y - after) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene PointLight rotate Y after gizmo +Y should be {0}, got {1}.",
+                    after,
+                    bound != null ? bound.Rotation.Y.ToString() : "(missing)");
+                return 171;
+            }
+
+            if (session.Level.Engine is StrideGameEngine stride)
+            {
+                Entity? entity = stride.FindEntity("PointLight");
+                if (entity == null || Math.Abs(entity.Transform.RotationEulerXYZ.Y - after) > 0.0001f)
+                {
+                    Console.Error.WriteLine(
+                        "Error: Stride entity PointLight rotate Y after gizmo +Y should be {0}, got {1}.",
+                        after,
+                        entity != null ? entity.Transform.RotationEulerXYZ.Y.ToString() : "(missing)");
+                    return 172;
+                }
+            }
+
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw after gizmo rotate ({0}): {1}", afterLabel, ex.Message);
+                return 173;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: gizmo rotate after {0} did not record History.", afterLabel);
+                return 174;
+            }
+
+            session.Undo();
+            float undone = gob.Rotation.Y;
+            Console.WriteLine("PointLight rotate Y after undo: {0}", undone);
+            if (Math.Abs(undone - before) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: gizmo rotate undo after {0} should restore rotate Y {1}, got {2}.",
+                    afterLabel, before, undone);
+                return 175;
+            }
+
+            Console.WriteLine("headless viewport rotate ok after {0}", afterLabel);
+            return 0;
+        }
+
+        /// <summary>
+        /// After LightTest load: select PointLight, hit-test the +X scale
+        /// handle, then BeginScaleDrag(X) + ApplyScaleDelta(+0.5). Prints
+        /// Scale X before / after / after Undo. CPU only.</summary>
+        private static int ProveViewportScale(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw during scale after {0}: {1}", afterLabel, ex.Message);
+                return 176;
+            }
+
+            if (!session.Level.Select("PointLight"))
+            {
+                Console.Error.WriteLine("Error: LevelSession.Select(PointLight) failed before gizmo scale after {0}.", afterLabel);
+                return 177;
+            }
+            if (!session.Level.SetGizmoMode(GizmoMode.Scale))
+            {
+                Console.Error.WriteLine("Error: SetGizmoMode(Scale) failed after {0}.", afterLabel);
+                return 178;
+            }
+
+            LevelNodeItem? lightItem = session.Level.SelectedNode;
+            var gob = lightItem != null ? lightItem.Node.As<IGameObject>() : null;
+            if (gob == null)
+            {
+                Console.Error.WriteLine("Error: PointLight did not adapt to IGameObject for gizmo scale after {0}.", afterLabel);
+                return 179;
+            }
+
+            float before = gob.Scale.X;
+            Console.WriteLine("PointLight scale X before: {0}", before);
+            Console.WriteLine(
+                "viewport gizmo path: LevelSession.BeginScaleDrag(X) + ApplyScaleDelta(+{0}) (CPU, no mouse/GPU)",
+                LevelSession.DocumentedScaleDeltaX);
+            Console.WriteLine("viewport gizmo mode: scale (W translate / E rotate / R scale)");
+
+            BoundSceneObject? light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: bound scene missing PointLight for scale hit after {0}.", afterLabel);
+                return 180;
+            }
+
+            ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
+            Vec3F tip = ScaleGizmo.HandleCenter(light.WorldTranslation, TranslateAxis.X);
+            float pixelX, pixelY;
+            if (ViewportSceneCamera.TryProject(frame, tip, presenter.Width, presenter.Height, out pixelX, out pixelY))
+            {
+                TranslateAxis? hit = session.Level.HitGizmoAt(pixelX, pixelY, presenter.Width, presenter.Height);
+                Console.WriteLine("viewport gizmo hit at +X scale handle: {0}", hit.HasValue ? hit.Value.ToString() : "(none)");
+                if (hit != TranslateAxis.X)
+                {
+                    Console.Error.WriteLine("Error: projected +X scale handle after {0} did not hit TranslateAxis.X.", afterLabel);
+                    return 181;
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Error: could not project the +X scale handle after {0}.", afterLabel);
+                return 182;
+            }
+
+            if (!session.Level.BeginScaleDrag(TranslateAxis.X))
+            {
+                Console.Error.WriteLine("Error: BeginScaleDrag(X) failed after {0}.", afterLabel);
+                return 183;
+            }
+            if (!session.Level.ApplyScaleDelta(LevelSession.DocumentedScaleDeltaX))
+            {
+                Console.Error.WriteLine("Error: ApplyScaleDelta(+X) failed after {0}.", afterLabel);
+                session.Level.EndScaleDrag();
+                return 184;
+            }
+            if (!session.Level.EndScaleDrag())
+            {
+                Console.Error.WriteLine("Error: EndScaleDrag failed after {0}.", afterLabel);
+                return 185;
+            }
+
+            float after = gob.Scale.X;
+            Console.WriteLine("PointLight scale X after +X: {0}", after);
+            if (Math.Abs(after - (before + LevelSession.DocumentedScaleDeltaX)) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: PointLight scale X after gizmo +X should be {0}, got {1}.",
+                    before + LevelSession.DocumentedScaleDeltaX,
+                    after);
+                return 186;
+            }
+
+            BoundSceneObject? bound = session.Level.BoundScene.Find("PointLight");
+            if (bound == null || Math.Abs(bound.Scale.X - after) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene PointLight scale X after gizmo +X should be {0}, got {1}.",
+                    after,
+                    bound != null ? bound.Scale.X.ToString() : "(missing)");
+                return 187;
+            }
+
+            if (session.Level.Engine is StrideGameEngine stride)
+            {
+                Entity? entity = stride.FindEntity("PointLight");
+                if (entity == null || Math.Abs(entity.Transform.Scale.X - after) > 0.0001f)
+                {
+                    Console.Error.WriteLine(
+                        "Error: Stride entity PointLight scale X after gizmo +X should be {0}, got {1}.",
+                        after,
+                        entity != null ? entity.Transform.Scale.X.ToString() : "(missing)");
+                    return 188;
+                }
+            }
+
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw after gizmo scale ({0}): {1}", afterLabel, ex.Message);
+                return 189;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: gizmo scale after {0} did not record History.", afterLabel);
+                return 190;
+            }
+
+            session.Undo();
+            float undone = gob.Scale.X;
+            Console.WriteLine("PointLight scale X after undo: {0}", undone);
+            if (Math.Abs(undone - before) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: gizmo scale undo after {0} should restore scale X {1}, got {2}.",
+                    afterLabel, before, undone);
+                return 191;
+            }
+
+            Console.WriteLine("headless viewport scale ok after {0}", afterLabel);
             return 0;
         }
 
@@ -1184,6 +1504,7 @@ namespace Aether.Editor
                 Console.Error.WriteLine("Error: LevelSession.Select(PointLight) failed before gizmo translate after {0}.", afterLabel);
                 return 135;
             }
+            session.Level.SetGizmoMode(GizmoMode.Translate);
 
             LevelNodeItem? lightItem = session.Level.SelectedNode;
             var gob = lightItem != null ? lightItem.Node.As<IGameObject>() : null;

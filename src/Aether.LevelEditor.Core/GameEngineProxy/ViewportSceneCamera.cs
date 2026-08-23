@@ -1,7 +1,7 @@
 // Copyright 2026 Resolvora LLC / Aether Engine contributors.
 // CPU camera + pick used by the Viewport. Reads the shared ViewportCamera
 // (yaw / pitch / distance / target) so LookAtRH / PerspectiveFovRH match
-// StrideRttPresenter and the translate gizmo. No GraphicsDevice.
+// StrideRttPresenter and the transform gizmos. No GraphicsDevice.
 
 using System;
 using System.Collections.Generic;
