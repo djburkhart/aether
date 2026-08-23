@@ -23,8 +23,8 @@ namespace Aether.Editor
     /// <summary>
     /// Session for the Phase 1 shell: UsingDom document, CircuitEditor graph,
     /// TimelineEditor tracks/intervals, LevelEditor hierarchy, C# / Lua
-    /// scripts, ATF selection/property contexts, HistoryContext undo, and
-    /// DomXml Open/Save.
+    /// scripts, live Viewport presenter, ATF selection/property contexts,
+    /// HistoryContext undo, and DomXml Open/Save.
     /// Menus call this directly; StandardFileCommands / IDocumentService are not
     /// the host.</summary>
     public sealed class EditorSession : INotifyPropertyChanged
@@ -50,6 +50,7 @@ namespace Aether.Editor
             Script = new ScriptSession(() => Game, () => History);
             Script.Ran += OnScriptRan;
             Script.Paused += OnScriptPaused;
+            Viewport = new ViewportSession();
             New();
         }
 
@@ -78,6 +79,8 @@ namespace Aether.Editor
         public LevelSession Level { get; }
 
         public ScriptSession Script { get; }
+
+        public ViewportSession Viewport { get; }
 
         public EditorDocumentKind ActiveKind
         {

@@ -10,7 +10,7 @@ This repo is the new monorepo. The SonyWWS originals stay in snapshot forks:
 
 ## Status
 
-Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia layout, UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, LevelEditor object hierarchy, C# / Lua Script pane, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. No Stride viewport. See [PORTING.md](PORTING.md).
+Phase 1. The ATF tools core is hosted in a real Avalonia desktop window (`src/Aether.Editor`): menu bar, Dock.Avalonia DCC layout (center Viewport, tools around it), UsingDom object list, CircuitEditor node graph, TimelineEditor tracks/intervals, LevelEditor object hierarchy, C# / Lua Script pane, live Viewport presenter, property pane, HistoryContext undo, File Open/Save, and a host-level plugin loader (`src/Aether.Plugins`: DI + AssemblyLoadContext). ATF assemblies still use MEF internally. This is an application shell, not the full editor. The Viewport presents live software frames; Stride GPU present is still blocked (#2741 / no Vulkan on CI). See [PORTING.md](PORTING.md).
 
 Phase 0 (merged): `src/Aether.Atf.Core`, `src/Aether.Atf.Commands`, `src/Aether.Atf.PropertyEditing`, `src/Aether.Atf.DomGen` / `aether-domgen`, and the headless UsingDom sample.
 
@@ -23,6 +23,8 @@ LevelEditor first slice: `src/Aether.LevelEditor.Core` (portable GameObject / tr
 Scripting first slice: `src/Aether.Scripting` hosts C# (Roslyn) and Lua (MoonSharp) in-process. Scripts talk to a loaded document through `ScriptDocument` (`ListObjects` / `GetAttribute` / `SetAttribute` / `Log`). `IDebugger` pauses Run on a breakpoint (wait handle + Continue). The Avalonia Script pane uses AvaloniaEdit with a gutter. Not the WinForms SLED IDE and not a DAP product. Committed samples: `testdata/scripts/resize-bill.csx` and `resize-bill.lua`.
 
 Preferred runtime is [Stride](https://github.com/stride3d/stride). Preferred editor UI is Avalonia. Stride's official Avalonia Game Studio is not ready enough to be our tools host; we build the authoring layer.
+
+Stride viewport: `src/Aether.Stride` references `Stride.Engine` **4.4.0-beta5**. The center Viewport is a live WriteableBitmap presenter (pulsing clear + rotating cube). It will switch to Stride render-to-texture when a graphics device exists. CI Linux has no Vulkan; software present is the live path. `NullGameEngine` remains the LevelEditor data backend. #2741 is still open.
 
 ## License
 
@@ -39,7 +41,7 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 dotnet run -c Release --project samples/UsingDom
 ```
 
-`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). File > Open / Save / Save As / New persist UsingDom XML, CircuitEditor `.circuit`, TimelineEditor `.timeline`, and LevelEditor `.lvl` files via Core `DomXmlReader` / `DomXmlWriter`. File Open of `.csx` / `.lua` loads the Script pane; File Save still applies to the last-activated document. Committed samples: `testdata/atf/UsingDom/ogre-adventure-ii.xml`, `testdata/atf/CircuitEditor/Example.circuit`, `testdata/atf/TimelineEditor/100.timeline`, `testdata/atf/LevelEditor/LightTest.lvl`, and `testdata/scripts/resize-bill.{csx,lua}`. Host plugins load from `plugins/` next to the executable (the sample `Hello Aether` contribution becomes a dock pane). `--headless-session` checks UsingDom selection / property edit / undo / XML round-trip, sample plugin DI, CircuitEditor load (9 modules / 8 wires), TimelineEditor load (10 tracks / 60 intervals), LevelEditor load (10 game objects / PointLight translate), C# and Lua scripts that set Bill Size to 14, then pause/continue on a breakpoint before that write.
+`dotnet run --project src/Aether.Editor` starts the desktop shell (needs a display). File > Open / Save / Save As / New persist UsingDom XML, CircuitEditor `.circuit`, TimelineEditor `.timeline`, and LevelEditor `.lvl` files via Core `DomXmlReader` / `DomXmlWriter`. File Open of `.csx` / `.lua` loads the Script pane; File Save still applies to the last-activated document. Committed samples: `testdata/atf/UsingDom/ogre-adventure-ii.xml`, `testdata/atf/CircuitEditor/Example.circuit`, `testdata/atf/TimelineEditor/100.timeline`, `testdata/atf/LevelEditor/LightTest.lvl`, and `testdata/scripts/resize-bill.{csx,lua}`. Host plugins load from `plugins/` next to the executable (the sample `Hello Aether` contribution becomes a dock pane). `--headless-session` checks UsingDom selection / property edit / undo / XML round-trip, sample plugin DI, CircuitEditor load (9 modules / 8 wires), TimelineEditor load (10 tracks / 60 intervals), LevelEditor load (10 game objects / PointLight translate), C# and Lua scripts that set Bill Size to 14, pause/continue on a breakpoint before that write, then a live Viewport presenter (frameCount ≥ 1) plus the DCC dock (Viewport center, tools around it).
 
 ## Docs
 

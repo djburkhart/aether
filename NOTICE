@@ -47,9 +47,11 @@ LevelEditor `level_editor.xsd` / `gap.xsd`, aether-domgen Schema.cs, and
 code; they are not Sony products. `src/Aether.Scripting` is new Aether
 in-process script hosting (Roslyn + MoonSharp). It is not a port of the
 SLED WinForms IDE or C++ LibSledDebugger; SLED is named only as the
-heritage of the language-plugin idea. Sony and PlayStation names appear
-only in About / NOTICE to describe ATF / SLED origin. Host plugins use
-Microsoft.Extensions.DependencyInjection. ATF Core / Commands /
+heritage of the language-plugin idea. `src/Aether.Stride` is new Aether
+hosting that references the MIT Stride Engine; it is not a Sony product
+and does not replace LevelEditor `NullGameEngine`. Sony and PlayStation
+names appear only in About / NOTICE to describe ATF / SLED origin. Host
+plugins use Microsoft.Extensions.DependencyInjection. ATF Core / Commands /
 PropertyEditing still use System.ComponentModel.Composition.
 See PORTING.md for the portable subset and cuts.
 

@@ -502,7 +502,7 @@ dotnet run -c Release --project src/Aether.Atf.DomGen.Cli -- \
 dotnet run -c Release --project samples/UsingDom
 ```
 
-CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts against UsingDom, then pause/continue on a breakpoint before Bill Size changes). Windows CI is not required; no Windows-only API remains in the compiled set.
+CI: `.github/workflows/ci.yml` on `ubuntu-latest` restores and builds `Aether.sln`, runs the DomGen `--check` smokes (UsingDom + CircuitEditor + TimelineEditor + LevelEditor), `dotnet run`s `samples/UsingDom`, then `src/Aether.Editor -- --headless-session` (edit/undo, XML round-trip, sample plugin DI, CircuitEditor graph, TimelineEditor, LevelEditor, C# and Lua scripts, pause/continue, then a live Viewport presenter + DCC dock). Windows CI is not required; the compiled set stays net10.0.
 
 ---
 
@@ -747,6 +747,60 @@ void Log(string message)
 4. Run `testdata/scripts/resize-bill.lua`, assert Bill Size == 14
 5. Set a breakpoint on line 2 of `resize-bill.csx`, `BeginRun`, assert paused and Bill Size still 12, Continue, assert Size 14
 6. Same pause/continue proof for `resize-bill.lua`
+
+```bash
+dotnet run -c Release --project src/Aether.Editor -- --headless-session
+```
+
+---
+
+# Stride viewport (live center pane)
+
+The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG. Not play-in-editor. #2741 is still open.**
+
+## Layout
+
+`EditorDockFactory` builds:
+
+| Region | Dockables |
+|---|---|
+| **Center document** | Viewport only (active) |
+| Left tools | Objects, Level, Script |
+| Right tools | Properties |
+| Bottom tools | History, Circuit, Timeline, Plugins (+ contributions) |
+
+Opening a `.lvl` does not replace the center Viewport. Level stays a left tool.
+
+## What presents today
+
+| Path | Status |
+|---|---|
+| **`software-writeablebitmap`** (live) | CPU BGRA: pulsing clear + rotating wireframe cube. Copied into an Avalonia `WriteableBitmap` / `Image` on a `DispatcherTimer` (~30 Hz). Does not steal mouse from other panes. Resizes with the dock (clamped). |
+| **`stride-rtt`** | Same control. `StrideGpuFrameSource.TryRender` is the switch point. Returns false until a Stride graphics device exists. |
+| Stride GPU on this Linux CI | `Game` + `GameContextHeadless` → `GameWindowHeadless`, then **`Failed to create vulkan instance: ErrorIncompatibleDriver`**. Null graphics backend was removed in 4.4. |
+| Official Avalonia Game control | **#2741 still open.** This pane is Aether's presenter, not that control. |
+| HWND / NativeControlHost | Not added. Would be a Windows-only extra; ubuntu `net10.0` must keep building. |
+
+Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and a non-empty bitmap, and checks the dock has Viewport in the center with Objects / Level / Script / Properties / History around it.
+
+## What we tried (Stride embed)
+
+| Option | Result |
+|---|---|
+| `Stride.Engine` **4.3.0.2507** | No `GameContextHeadless`. |
+| `Stride.Engine` **4.4.0-beta5** | Chosen. Headless window types exist. |
+| Render-to-texture → WriteableBitmap | Preferred present path. Blocked here by Vulkan device creation. Hook is `StrideGpuFrameSource`. |
+| `Game.Run(GameContextHeadless)` | Constructs window, then fails at `GraphicsAdapterFactory`. Probe calls `Exit` on `GameStarted` so a GPU host would not hang in the game loop. |
+| WPF `GameEngineHost` HWND | Windows-only. Not in this cut. |
+| AvaStride | Opposite direction (Avalonia inside the game). |
+
+`NullGameEngine` is still the LevelEditor data backend. The Viewport does not bind GameObjects.
+
+## Next cut
+
+1. On a machine with a device: implement `StrideGpuFrameSource` (offscreen target → BGRA copy). The Image control stays.
+2. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
+3. Only then replace `NullGameEngine`.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session

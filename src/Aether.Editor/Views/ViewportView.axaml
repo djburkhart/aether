@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aether.Editor.Views.ViewportView">
+  <Grid>
+    <Image x:Name="FrameImage"
+           Stretch="Fill"
+           HorizontalAlignment="Stretch"
+           VerticalAlignment="Stretch" />
+    <Border VerticalAlignment="Bottom"
+            HorizontalAlignment="Stretch"
+            Background="#99000000"
+            Padding="8,3">
+      <TextBlock x:Name="Overlay"
+                 Foreground="White"
+                 FontSize="11"
+                 TextWrapping="NoWrap"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+  </Grid>
+</UserControl>
