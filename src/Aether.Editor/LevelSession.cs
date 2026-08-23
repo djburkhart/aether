@@ -5,11 +5,13 @@ using System.IO;
 using System.Runtime.CompilerServices;
 
 using Aether.Level;
+using Aether.Stride;
 
 using Sce.Atf;
 using Sce.Atf.Adaptation;
 using Sce.Atf.Applications;
 using Sce.Atf.Dom;
+using Sce.Atf.VectorMath;
 
 using LevelEditor.DomNodeAdapters;
 using LevelEditorCore;
@@ -18,7 +20,8 @@ namespace Aether.Editor
 {
     /// <summary>
     /// LevelEditor document session: schema, LightTest.lvl load, Open/Save,
-    /// selection, and HistoryContext. The Avalonia hierarchy view binds here.</summary>
+    /// selection, HistoryContext, and a bound scene pushed to IGameEngineProxy.
+    /// The Avalonia hierarchy view binds here.</summary>
     public sealed class LevelSession : INotifyPropertyChanged
     {
         public LevelSession()
@@ -30,6 +33,8 @@ namespace Aether.Editor
             SchemaPath = schemaPath;
             Loader = new Aether.Level.SchemaLoader(schemaPath);
             Nodes = new ObservableCollection<LevelNodeItem>();
+            Engine = NullGameEngine.Instance;
+            BoundScene = new BoundLevelScene();
             LoadExample();
         }
 
@@ -45,7 +50,34 @@ namespace Aether.Editor
 
         public SelectionContext Selection { get; private set; } = null!;
 
+        /// <summary>
+        /// Level backend. <see cref="StrideGameEngine"/> when a GraphicsDevice
+        /// exists; <see cref="NullGameEngine"/> otherwise.</summary>
+        public IGameEngineProxy Engine { get; private set; }
+
+        /// <summary>
+        /// CPU snapshot of GameObjects. Always populated after load, including
+        /// on ubuntu CI where the engine stays <see cref="NullGameEngine"/>.</summary>
+        public BoundLevelScene BoundScene { get; }
+
+        /// <summary>
+        /// <see cref="BoundLevelScene.StrideBackend"/> when the Stride engine
+        /// owns the world; otherwise <see cref="BoundLevelScene.BoundBackend"/>.</summary>
+        public string SceneBackend
+        {
+            get { return BoundScene.Backend; }
+        }
+
         public ObservableCollection<LevelNodeItem> Nodes { get; }
+
+        /// <summary>
+        /// Swap the Level backend after the Viewport has attempted device init.
+        /// Rebuilds the bound scene and calls SetGameWorld.</summary>
+        public void AttachEngine(IGameEngineProxy engine)
+        {
+            Engine = engine ?? NullGameEngine.Instance;
+            SyncBoundScene();
+        }
 
         public string? FilePath
         {
@@ -245,6 +277,7 @@ namespace Aether.Editor
             OnPropertyChanged(nameof(SelectedNode));
             NotifyFileState();
             NotifyHistoryCommands();
+            SyncBoundScene();
         }
 
         private void ReloadTree()
@@ -262,6 +295,7 @@ namespace Aether.Editor
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(GameObjectCount));
             OnPropertyChanged(nameof(TopLevelCount));
+            SyncBoundScene();
         }
 
         private static LevelNodeItem BuildFolderItem(IGameObjectFolder folder)
@@ -355,6 +389,54 @@ namespace Aether.Editor
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(WindowTitle));
             OnPropertyChanged(nameof(StatusText));
+        }
+
+        private void SyncBoundScene()
+        {
+            string backend = Engine is StrideGameEngine
+                ? BoundLevelScene.StrideBackend
+                : BoundLevelScene.BoundBackend;
+            try
+            {
+                BoundScene.SyncFrom(Game, backend);
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                Engine.SetGameWorld(Game);
+                Engine.WaitForPendingResources();
+            }
+            catch (Exception)
+            {
+            }
+
+            PushPlaceholders();
+            OnPropertyChanged(nameof(SceneBackend));
+        }
+
+        private void PushPlaceholders()
+        {
+            try
+            {
+                var list = new ScenePlaceholder[BoundScene.Count];
+                for (int i = 0; i < BoundScene.Count; i++)
+                {
+                    BoundSceneObject obj = BoundScene.Objects[i];
+                    Vec3F w = obj.WorldTranslation;
+                    Vec3F r = obj.Rotation;
+                    Vec3F s = obj.Scale;
+                    list[i] = new ScenePlaceholder(
+                        obj.Name, w.X, w.Y, w.Z, r.X, r.Y, r.Z, s.X, s.Y, s.Z);
+                }
+                StrideRttPresenter.SetPlaceholders(list);
+            }
+            catch (Exception)
+            {
+                StrideRttPresenter.SetPlaceholders(Array.Empty<ScenePlaceholder>());
+            }
         }
 
         private string UniqueGameObjectName(string prefix)

@@ -4,7 +4,8 @@ namespace Aether.Editor
 {
     /// <summary>
     /// Center Viewport session: live presenter + Stride host probe.
-    /// NullGameEngine stays the LevelEditor data backend.</summary>
+    /// After device init, the Level session attaches StrideGameEngine or
+    /// keeps NullGameEngine.</summary>
     public sealed class ViewportSession
     {
         public ViewportSession()
@@ -14,6 +15,17 @@ namespace Aether.Editor
             Presenter = new ViewportPresenter();
             Presenter.Tick(0);
             Result = StrideHost.Probe();
+        }
+
+        /// <summary>
+        /// Bind the Level backend into the presenter and tick once so a GPU
+        /// path can draw the bound scene instead of the demo cube.</summary>
+        public void BindLevel(LevelSession level)
+        {
+            if (level == null)
+                return;
+            Presenter.BindEngine(level.Engine);
+            Presenter.Tick(0.016);
         }
 
         public StrideHostResult Result { get; }
@@ -37,9 +49,12 @@ namespace Aether.Editor
                 string gpu = Presenter.ActivePath == ViewportPresenter.StrideRttPath
                     ? "Stride GPU rtt"
                     : (StrideRttPresenter.DeviceReady ? "Stride GPU ready" : "Stride GPU: no");
+                string scene = StrideRttPresenter.PlaceholderCount > 0
+                    ? StrideRttPresenter.PlaceholderCount + " scene objects"
+                    : "no level scene";
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
-                    " · #2741 open";
+                    " · " + scene + " · #2741 open";
             }
         }
 

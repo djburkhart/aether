@@ -8,7 +8,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
-    <Description>Stride Engine host for Aether: Game probe plus offscreen RTT presenter.</Description>
+    <Description>Stride Engine host for Aether: Game probe, offscreen RTT presenter, and a Level IGameEngineProxy that creates Entity placeholders.</Description>
     <Product>Aether Engine</Product>
     <Authors>Resolvora LLC</Authors>
     <Copyright>Copyright 2026 Resolvora LLC</Copyright>
@@ -21,6 +21,10 @@
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.4.0-beta5" />
     <PackageReference Include="Stride.Shaders.Compilers" Version="4.4.0-beta5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.LevelEditor.Core\Aether.LevelEditor.Core.csproj" />
   </ItemGroup>
 
 </Project>

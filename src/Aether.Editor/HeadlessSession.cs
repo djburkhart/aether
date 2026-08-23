@@ -9,14 +9,20 @@ using Aether.Editor.Dock;
 using Aether.Scripting;
 using Aether.Stride;
 
+using Stride.Engine;
+
 using Dock.Model.Controls;
 using Aether.Timeline;
 using Aether.Plugins;
 
 using Microsoft.Extensions.DependencyInjection;
 
+using Sce.Atf;
 using Sce.Atf.Adaptation;
 using Sce.Atf.Controls.PropertyEditing;
+using Sce.Atf.VectorMath;
+
+using LevelEditorCore;
 
 using UsingDom;
 
@@ -588,6 +594,15 @@ namespace Aether.Editor
                 return 75;
             }
 
+            int sceneCode = ProveBoundScene(
+                session,
+                expectedCount: objects,
+                expectedName: "PointLight",
+                expectedTranslateX: tx,
+                afterLabel: "load");
+            if (sceneCode != 0)
+                return sceneCode;
+
             session.Level.SelectedNode = light;
             if (session.PropertyTarget == null)
             {
@@ -613,6 +628,15 @@ namespace Aether.Editor
                 return 78;
             }
 
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: objects,
+                expectedName: "KeyLight",
+                expectedTranslateX: tx,
+                afterLabel: "name edit");
+            if (sceneCode != 0)
+                return sceneCode;
+
             if (!session.CanUndo)
             {
                 Console.Error.WriteLine("Error: level HistoryContext did not record the edit.");
@@ -628,6 +652,53 @@ namespace Aether.Editor
                 return 80;
             }
 
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: objects,
+                expectedName: "PointLight",
+                expectedTranslateX: tx,
+                afterLabel: "name undo");
+            if (sceneCode != 0)
+                return sceneCode;
+
+            LevelNodeItem? lightAfterUndo = session.Level.Find("PointLight");
+            var gobAfterUndo = lightAfterUndo != null
+                ? lightAfterUndo.Node.As<IGameObject>()
+                : null;
+            if (gobAfterUndo == null)
+            {
+                Console.Error.WriteLine("Error: PointLight missing after name undo; cannot prove translate bind.");
+                return 83;
+            }
+
+            float movedX = tx + 1.5f;
+            session.Level.History.DoTransaction(
+                () =>
+                {
+                    gobAfterUndo.Translation = new Vec3F(movedX, gobAfterUndo.Translation.Y, gobAfterUndo.Translation.Z);
+                },
+                "Translate PointLight");
+            Console.WriteLine("PointLight translate X after edit: {0}", gobAfterUndo.Translation.X);
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: objects,
+                expectedName: "PointLight",
+                expectedTranslateX: movedX,
+                afterLabel: "translate edit");
+            if (sceneCode != 0)
+                return sceneCode;
+
+            session.Undo();
+            Console.WriteLine("PointLight translate X after undo: {0}", gobAfterUndo.Translation.X);
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: objects,
+                expectedName: "PointLight",
+                expectedTranslateX: tx,
+                afterLabel: "translate undo");
+            if (sceneCode != 0)
+                return sceneCode;
+
             session.AddLevelGameObject();
             int afterAdd = session.Level.GameObjectCount;
             Console.WriteLine("level after add: {0} game objects", afterAdd);
@@ -636,6 +707,15 @@ namespace Aether.Editor
                 Console.Error.WriteLine("Error: Add GameObject should add one game object.");
                 return 81;
             }
+
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: afterAdd,
+                expectedName: "PointLight",
+                expectedTranslateX: tx,
+                afterLabel: "add");
+            if (sceneCode != 0)
+                return sceneCode;
 
             string temp = Path.Combine(Path.GetTempPath(), "aether-level-roundtrip-" + Guid.NewGuid().ToString("N") + ".lvl");
             try
@@ -652,6 +732,15 @@ namespace Aether.Editor
                         session.Level.GameObjectCount);
                     return 82;
                 }
+
+                sceneCode = ProveBoundScene(
+                    session,
+                    expectedCount: afterAdd,
+                    expectedName: "PointLight",
+                    expectedTranslateX: tx,
+                    afterLabel: "reopen");
+                if (sceneCode != 0)
+                    return sceneCode;
             }
             finally
             {
@@ -659,6 +748,96 @@ namespace Aether.Editor
             }
 
             Console.WriteLine("headless level ok");
+            return 0;
+        }
+
+        private static int ProveBoundScene(
+            EditorSession session,
+            int expectedCount,
+            string expectedName,
+            float expectedTranslateX,
+            string afterLabel)
+        {
+            BoundLevelScene scene = session.Level.BoundScene;
+            Console.WriteLine("bound scene backend: {0}", session.Level.SceneBackend);
+            Console.WriteLine("bound scene objects after {0}: {1}", afterLabel, scene.Count);
+            BoundSceneObject? found = scene.Find(expectedName);
+            Console.WriteLine(
+                "bound scene {0}: {1}",
+                expectedName,
+                found != null ? "yes (translate X: " + found.Translation.X + ")" : "no");
+
+            if (scene.Count != expectedCount)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene after {0} should have {1} GameObjects, got {2}.",
+                    afterLabel,
+                    expectedCount,
+                    scene.Count);
+                return 84;
+            }
+            if (found == null)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene after {0} is missing {1}.",
+                    afterLabel,
+                    expectedName);
+                return 85;
+            }
+            if (Math.Abs(found.Translation.X - expectedTranslateX) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: bound scene {0} translate X after {1} should be {2}, got {3}.",
+                    expectedName,
+                    afterLabel,
+                    expectedTranslateX,
+                    found.Translation.X);
+                return 86;
+            }
+
+            if (session.Level.Engine is StrideGameEngine stride)
+            {
+                Console.WriteLine("stride scene objects after {0}: {1}", afterLabel, stride.EntityCount);
+                Console.WriteLine(
+                    "stride scene {0}: {1}",
+                    expectedName,
+                    stride.HasEntity(expectedName) ? "yes" : "no");
+                if (stride.EntityCount != expectedCount)
+                {
+                    Console.Error.WriteLine(
+                        "Error: Stride scene after {0} should have {1} entities, got {2}.",
+                        afterLabel,
+                        expectedCount,
+                        stride.EntityCount);
+                    return 87;
+                }
+                if (!stride.HasEntity(expectedName))
+                {
+                    Console.Error.WriteLine(
+                        "Error: Stride scene after {0} is missing {1}.",
+                        afterLabel,
+                        expectedName);
+                    return 88;
+                }
+
+                Entity? entity = stride.FindEntity(expectedName);
+                if (entity != null &&
+                    Math.Abs(entity.Transform.Position.X - expectedTranslateX) > 0.0001f)
+                {
+                    Console.Error.WriteLine(
+                        "Error: Stride entity {0} translate X after {1} should be {2}, got {3}.",
+                        expectedName,
+                        afterLabel,
+                        expectedTranslateX,
+                        entity.Transform.Position.X);
+                    return 89;
+                }
+            }
+            else
+            {
+                Console.WriteLine("stride scene: not bound (NullGameEngine; no GraphicsDevice)");
+            }
+
             return 0;
         }
 
@@ -859,10 +1038,14 @@ namespace Aether.Editor
                 presenter.Tick(0.05 * (i + 1));
 
             Console.WriteLine("stride-rtt: {0}", StrideRttPresenter.StatusLine);
+            Console.WriteLine("stride-rtt placeholders: {0}", StrideRttPresenter.PlaceholderCount);
             Console.WriteLine("viewport path: {0}", presenter.ActivePath);
             Console.WriteLine("viewport frames: {0}", presenter.FrameCount);
             Console.WriteLine("viewport size: {0}x{1}", presenter.Width, presenter.Height);
             Console.WriteLine("viewport live: {0}", presenter.IsLiveControl);
+            Console.WriteLine("level engine: {0}", session.Level.Engine.GetType().Name);
+            Console.WriteLine("bound scene backend: {0}", session.Level.SceneBackend);
+            Console.WriteLine("bound scene objects: {0}", session.Level.BoundScene.Count);
 
             if (presenter.FrameCount < 1)
             {
@@ -910,9 +1093,27 @@ namespace Aether.Editor
             }
 
             if (presenter.ActivePath == ViewportPresenter.StrideRttPath)
+            {
                 Console.WriteLine("stride gpu: presenting via stride-rtt (offscreen Texture.GetData)");
+                if (StrideRttPresenter.PlaceholderCount < 1)
+                {
+                    Console.Error.WriteLine("Error: stride-rtt is live but no Level placeholders are bound.");
+                    return 121;
+                }
+            }
             else
                 Console.WriteLine("stride gpu: software-writeablebitmap fallback (expected on ubuntu CI without Vulkan)");
+
+            if (session.Level.BoundScene.Count < 1)
+            {
+                Console.Error.WriteLine("Error: Level bind produced an empty bound scene.");
+                return 122;
+            }
+            if (session.Level.BoundScene.Find("PointLight") == null)
+            {
+                Console.Error.WriteLine("Error: bound scene is missing PointLight after viewport ticks.");
+                return 123;
+            }
 
             Console.WriteLine("headless stride ok");
             return 0;
