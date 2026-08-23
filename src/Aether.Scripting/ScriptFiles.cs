@@ -10,6 +10,12 @@ namespace Aether.Scripting
         public const string SampleCSharpFileName = "resize-bill.csx";
         public const string SampleLuaFileName = "resize-bill.lua";
         public const int ExpectedBillSize = 14;
+        public const int DefaultBillSize = 12;
+
+        /// <summary>
+        /// 1-based line of <c>SetAttribute(..., 14)</c> in the resize-bill fixtures.
+        /// A breakpoint here must pause before Bill Size changes.</summary>
+        public const int SampleWriteLine = 2;
 
         /// <summary>True when the path is a script this host can run (.csx / .lua).</summary>
         public static bool IsScriptFile(string path)

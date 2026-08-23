@@ -3,6 +3,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Aether.Scripting;
 
@@ -11,9 +14,9 @@ using Sce.Atf.Dom;
 namespace Aether.Editor
 {
     /// <summary>
-    /// Script pane session: C# / Lua source, Run, and output. File Open of
-    /// .csx / .lua loads here; File Save still applies to the last-activated
-    /// game / circuit / timeline / level document.</summary>
+    /// Script pane session: C# / Lua source, Run, pause/continue, and output.
+    /// File Open of .csx / .lua loads here; File Save still applies to the
+    /// last-activated game / circuit / timeline / level document.</summary>
     public sealed class ScriptSession : INotifyPropertyChanged
     {
         public ScriptSession(Func<DomNode> getRoot, Func<HistoryContext> getHistory)
@@ -29,6 +32,9 @@ namespace Aether.Editor
             LanguageId = "csharp";
             Source = DefaultCSharpSource;
             OutputLines = new ObservableCollection<string>();
+            Host.Debugger.Paused += OnDebuggerPaused;
+            Host.Debugger.Continued += OnDebuggerContinued;
+            Host.Debugger.BreakpointsChanged += OnBreakpointsChanged;
         }
 
         public IScriptHost Host { get; }
@@ -55,6 +61,7 @@ namespace Aether.Editor
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(LanguageDisplay));
                 OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(BreakpointPath));
             }
         }
 
@@ -90,6 +97,18 @@ namespace Aether.Editor
                 m_filePath = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(BreakpointPath));
+            }
+        }
+
+        /// <summary>Path used to record gutter / headless breakpoints.</summary>
+        public string BreakpointPath
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(m_filePath))
+                    return m_filePath;
+                return "untitled." + (m_languageId == "lua" ? "lua" : "csx");
             }
         }
 
@@ -97,7 +116,11 @@ namespace Aether.Editor
         {
             get
             {
-                string file = m_filePath != null ? Path.GetFileName(m_filePath) : "untitled." + (m_languageId == "lua" ? "lua" : "csx");
+                string file = Path.GetFileName(BreakpointPath);
+                if (Debugger.IsPaused && Debugger.CurrentPause != null)
+                    return file + " — paused at line " + Debugger.CurrentPause.Line + " (" + LanguageDisplay + ")";
+                if (m_running)
+                    return file + " — running (" + LanguageDisplay + ")";
                 return file + " — " + LanguageDisplay;
             }
         }
@@ -107,9 +130,51 @@ namespace Aether.Editor
             get { return string.Join(Environment.NewLine, OutputLines); }
         }
 
+        public bool IsRunning
+        {
+            get { return m_running; }
+        }
+
+        public bool IsPaused
+        {
+            get { return Debugger.IsPaused; }
+        }
+
+        public bool CanContinue
+        {
+            get { return Debugger.IsPaused; }
+        }
+
+        public string WatchText
+        {
+            get
+            {
+                PauseInfo? pause = Debugger.CurrentPause;
+                if (pause == null)
+                    return m_running ? "Running…" : "Not paused.";
+
+                var text = new StringBuilder();
+                text.Append(pause.LanguageId);
+                text.Append(" line ");
+                text.Append(pause.Line);
+                text.Append("  ");
+                text.Append(Path.GetFileName(pause.Path));
+                foreach (WatchValue watch in pause.Watches)
+                {
+                    text.AppendLine();
+                    text.Append(watch.Name);
+                    text.Append(" = ");
+                    text.Append(watch.Value);
+                }
+                return text.ToString();
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public event EventHandler? Ran;
+
+        public event EventHandler? Paused;
 
         public void Open(string path)
         {
@@ -140,25 +205,25 @@ namespace Aether.Editor
             Open(path);
         }
 
+        public void ToggleBreakpoint(int line)
+        {
+            Debugger.ToggleBreakpoint(BreakpointPath, line);
+        }
+
+        public bool HasBreakpoint(int line)
+        {
+            return Debugger.HasBreakpoint(BreakpointPath, line);
+        }
+
+        public void Continue()
+        {
+            Debugger.Continue();
+        }
+
+        /// <summary>Blocks until the script finishes, including any pause/continue.</summary>
         public ScriptResult Run()
         {
-            DomNode root = m_getRoot();
-            if (root == null)
-                return Fail("No document is bound.");
-
-            var document = new ScriptDocument(root, m_getHistory());
-            ScriptResult result = Host.Run(m_languageId, m_source, document);
-            if (result.Succeeded)
-            {
-                AppendOutput(string.IsNullOrEmpty(result.Output) ? "ok" : result.Output);
-            }
-            else
-            {
-                AppendOutput("error: " + result.Output);
-            }
-
-            Ran?.Invoke(this, EventArgs.Empty);
-            return result;
+            return BeginRun().GetAwaiter().GetResult();
         }
 
         public ScriptResult RunFile(string path)
@@ -167,10 +232,110 @@ namespace Aether.Editor
             return Run();
         }
 
+        /// <summary>
+        /// Starts Run on a worker thread so a breakpoint does not freeze the
+        /// caller (UI or headless waiter).</summary>
+        public Task<ScriptResult> BeginRun()
+        {
+            if (m_running)
+                return Task.FromResult(Fail("A script is already running."));
+
+            DomNode root = m_getRoot();
+            if (root == null)
+                return Task.FromResult(Fail("No document is bound."));
+
+            m_running = true;
+            NotifyRunState();
+            var document = new ScriptDocument(root, m_getHistory());
+            string path = BreakpointPath;
+            string source = m_source;
+            string languageId = m_languageId;
+            m_sync = SynchronizationContext.Current;
+            var sync = m_sync;
+            var tcs = new TaskCompletionSource<ScriptResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                ScriptResult result;
+                try
+                {
+                    result = Host.Run(languageId, source, document, path);
+                }
+                catch (Exception ex)
+                {
+                    result = ScriptResult.Fail(ex.Message, ex);
+                }
+
+                void Finish()
+                {
+                    m_running = false;
+                    if (result.Succeeded)
+                        AppendOutput(string.IsNullOrEmpty(result.Output) ? "ok" : result.Output);
+                    else
+                        AppendOutput("error: " + result.Output);
+                    NotifyRunState();
+                    Ran?.Invoke(this, EventArgs.Empty);
+                    tcs.TrySetResult(result);
+                }
+
+                if (sync != null)
+                    sync.Post(_ => Finish(), null);
+                else
+                    Finish();
+            });
+
+            return tcs.Task;
+        }
+
+        public Task<ScriptResult> BeginRunFile(string path)
+        {
+            Open(path);
+            return BeginRun();
+        }
+
         private ScriptResult Fail(string message)
         {
             AppendOutput("error: " + message);
             return ScriptResult.Fail(message);
+        }
+
+        private void OnDebuggerPaused(object? sender, EventArgs e)
+        {
+            Post(() =>
+            {
+                PauseInfo? pause = Debugger.CurrentPause;
+                if (pause != null)
+                    AppendOutput("paused at line " + pause.Line);
+                NotifyRunState();
+                Paused?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        private void OnDebuggerContinued(object? sender, EventArgs e)
+        {
+            Post(NotifyRunState);
+        }
+
+        private void Post(Action action)
+        {
+            if (m_sync != null)
+                m_sync.Post(_ => action(), null);
+            else
+                action();
+        }
+
+        private void OnBreakpointsChanged(object? sender, EventArgs e)
+        {
+            OnPropertyChanged(nameof(StatusText));
+        }
+
+        private void NotifyRunState()
+        {
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(IsPaused));
+            OnPropertyChanged(nameof(CanContinue));
+            OnPropertyChanged(nameof(WatchText));
+            OnPropertyChanged(nameof(StatusText));
         }
 
         private void AppendOutput(string line)
@@ -187,12 +352,15 @@ namespace Aether.Editor
 
         private const string DefaultCSharpSource =
             "// C# script. document.ListObjects() / GetAttribute / SetAttribute / log.\n" +
-            "// Example: document.SetAttribute(\"Bill\", \"size\", 14);\n";
+            "// Example: document.SetAttribute(\"Bill\", \"size\", 14);\n" +
+            "// Click the gutter to set a breakpoint; Run pauses, Continue resumes.\n";
 
         private readonly Func<DomNode> m_getRoot;
         private readonly Func<HistoryContext> m_getHistory;
         private string m_languageId = "csharp";
         private string m_source = string.Empty;
         private string? m_filePath;
+        private volatile bool m_running;
+        private SynchronizationContext? m_sync;
     }
 }

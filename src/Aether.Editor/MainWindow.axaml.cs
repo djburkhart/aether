@@ -272,7 +272,9 @@ namespace Aether.Editor
                 "ported as Aether.Atf.Core / Commands / PropertyEditing. " +
                 "Sony and PlayStation names are used only to describe that origin.\n\n" +
                 "Open/Save uses Core DomXmlReader / DomXmlWriter for UsingDom XML, CircuitEditor .circuit, TimelineEditor .timeline, and LevelEditor .lvl files. " +
-                "File Open of .csx / .lua loads the Script pane (C# via Roslyn, Lua via MoonSharp). File Save still applies to the last-activated document. " +
+                "File Open of .csx / .lua loads the Script pane (C# via Roslyn, Lua via MoonSharp). " +
+                "Click the gutter to set a breakpoint; Run pauses before that statement, Continue resumes. " +
+                "File Save still applies to the last-activated document. " +
                 "Host plugins use Microsoft.Extensions.DependencyInjection + AssemblyLoadContext; " +
                 "ATF types still use MEF internally.\n" +
                 "Docking: Dock.Avalonia. Property grid: bodong.Avalonia.PropertyGrid. " +

@@ -5,9 +5,8 @@ using MoonSharp.Interpreter;
 namespace Aether.Scripting
 {
     /// <summary>
-    /// Lua via MoonSharp (pure C#, HardSandbox). Chosen over NLua so this
-    /// slice has no native Lua / C++ build. SLED bundled Lua 5.1.4 / 5.2.3
-    /// for an in-game C++ target; Aether hosts in-process instead.</summary>
+    /// Lua via MoonSharp (pure C#, HardSandbox). Attaches a host debugger so
+    /// <c>GetAction</c> can pause on source lines. No Visual Studio / DAP.</summary>
     public sealed class LuaScriptLanguage : IScriptLanguage
     {
         public string Id
@@ -25,9 +24,11 @@ namespace Aether.Scripting
             get { return ".lua"; }
         }
 
-        public ScriptResult Run(string source, ScriptDocument document)
+        public ScriptResult Run(string source, ScriptRunContext context)
         {
-            if (document == null)
+            if (context == null)
+                throw new ArgumentNullException("context");
+            if (context.Document == null)
                 throw new ArgumentNullException("document");
             if (string.IsNullOrWhiteSpace(source))
                 return ScriptResult.Fail("Lua source is empty.");
@@ -36,9 +37,10 @@ namespace Aether.Scripting
             {
                 UserData.RegisterType<ScriptDocument>();
                 var script = new Script(CoreModules.Preset_HardSandbox);
-                script.Globals["document"] = document;
+                script.Globals["document"] = context.Document;
+                script.AttachDebugger(new MoonSharpHostDebugger(context.Breaks, context.Path, context.Document));
                 script.DoString(source);
-                return ScriptResult.Ok(document.Output);
+                return ScriptResult.Ok(context.Document.Output);
             }
             catch (InterpreterException ex)
             {

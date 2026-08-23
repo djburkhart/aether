@@ -59,7 +59,11 @@ namespace Aether.Editor
             if (code != 0)
                 return code;
 
-            return ProveScripts(session);
+            code = ProveScripts(session);
+            if (code != 0)
+                return code;
+
+            return ProveDebugger(session);
         }
 
         public static int WriteFixture()
@@ -702,14 +706,110 @@ namespace Aether.Editor
                 return 95;
             }
 
-            session.Script.Debugger.SetBreakpoint(csharp, 2);
-            if (session.Script.Debugger.Breakpoints.Count != 1)
+            Console.WriteLine("headless scripts ok");
+            return 0;
+        }
+
+        private static int ProveDebugger(EditorSession session)
+        {
+            string? csharp = ScriptFiles.FindSampleCSharpPath();
+            string? lua = ScriptFiles.FindSampleLuaPath();
+            if (csharp == null || lua == null)
             {
-                Console.Error.WriteLine("Error: IDebugger.SetBreakpoint did not record the breakpoint.");
-                return 96;
+                Console.Error.WriteLine("Error: could not find testdata/scripts/resize-bill.csx or .lua");
+                return 100;
             }
 
-            Console.WriteLine("headless scripts ok");
+            int code = ProvePauseContinue(session, csharp, "C#");
+            if (code != 0)
+                return code;
+            return ProvePauseContinue(session, lua, "Lua");
+        }
+
+        private static int ProvePauseContinue(EditorSession session, string path, string label)
+        {
+            session.New();
+            session.Script.Debugger.ClearBreakpoints();
+            session.Script.Debugger.SetBreakpoint(path, ScriptFiles.SampleWriteLine);
+
+            object? before = BillSize(session);
+            Console.WriteLine("{0} Bill Size before run: {1}", label, before);
+            if (!Equals(before, ScriptFiles.DefaultBillSize))
+            {
+                Console.Error.WriteLine("Error: {0} fixture Bill Size should be {1}.", label, ScriptFiles.DefaultBillSize);
+                return 101;
+            }
+
+            System.Threading.Tasks.Task<ScriptResult> task = session.Script.BeginRunFile(path);
+            if (!session.Script.Debugger.WaitUntilPaused(15000))
+            {
+                Console.Error.WriteLine("Error: {0} script did not pause on line {1}.", label, ScriptFiles.SampleWriteLine);
+                session.Script.Continue();
+                task.Wait(5000);
+                return 102;
+            }
+
+            PauseInfo? pause = session.Script.Debugger.CurrentPause;
+            Console.WriteLine("{0} paused at line {1} ({2})", label, pause?.Line, pause?.LanguageId);
+            if (pause == null || pause.Line != ScriptFiles.SampleWriteLine)
+            {
+                Console.Error.WriteLine("Error: {0} pause line should be {1}.", label, ScriptFiles.SampleWriteLine);
+                session.Script.Continue();
+                task.Wait(5000);
+                return 103;
+            }
+
+            object? paused = BillSize(session);
+            Console.WriteLine("{0} Bill Size while paused: {1}", label, paused);
+            if (!Equals(paused, ScriptFiles.DefaultBillSize))
+            {
+                Console.Error.WriteLine("Error: {0} breakpoint should pause before SetAttribute (Size still {1}).", label, ScriptFiles.DefaultBillSize);
+                session.Script.Continue();
+                task.Wait(5000);
+                return 104;
+            }
+
+            bool sawSize = false;
+            foreach (WatchValue watch in pause.Watches)
+            {
+                if (string.Equals(watch.Name, "Bill.size", StringComparison.OrdinalIgnoreCase))
+                    sawSize = true;
+            }
+            if (!sawSize)
+            {
+                Console.Error.WriteLine("Error: {0} pause watches are missing Bill.size.", label);
+                session.Script.Continue();
+                task.Wait(5000);
+                return 105;
+            }
+
+            session.Script.Continue();
+            if (!task.Wait(15000))
+            {
+                Console.Error.WriteLine("Error: {0} script did not finish after Continue.", label);
+                return 106;
+            }
+            if (!task.Result.Succeeded)
+            {
+                Console.Error.WriteLine("Error: {0} script failed after Continue: {1}", label, task.Result.Output);
+                return 107;
+            }
+
+            object? after = BillSize(session);
+            Console.WriteLine("{0} Bill Size after Continue: {1}", label, after);
+            if (!Equals(after, ScriptFiles.ExpectedBillSize))
+            {
+                Console.Error.WriteLine("Error: {0} Continue should set Bill Size to {1}.", label, ScriptFiles.ExpectedBillSize);
+                return 108;
+            }
+
+            if (session.Script.Debugger.IsPaused)
+            {
+                Console.Error.WriteLine("Error: {0} debugger should not stay paused after Continue.", label);
+                return 109;
+            }
+
+            Console.WriteLine("headless {0} pause/continue ok", label);
             return 0;
         }
 

@@ -15,7 +15,7 @@ namespace Aether.Scripting
         /// <summary>Primary file extension including the dot (<c>.csx</c>, <c>.lua</c>).</summary>
         string FileExtension { get; }
 
-        /// <summary>Runs <paramref name="source"/> against <paramref name="document"/>.</summary>
-        ScriptResult Run(string source, ScriptDocument document);
+        /// <summary>Runs <paramref name="source"/> against the context document.</summary>
+        ScriptResult Run(string source, ScriptRunContext context);
     }
 }
