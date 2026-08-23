@@ -858,6 +858,7 @@ namespace Aether.Editor
             for (int i = 0; i < 8; i++)
                 presenter.Tick(0.05 * (i + 1));
 
+            Console.WriteLine("stride-rtt: {0}", StrideRttPresenter.StatusLine);
             Console.WriteLine("viewport path: {0}", presenter.ActivePath);
             Console.WriteLine("viewport frames: {0}", presenter.FrameCount);
             Console.WriteLine("viewport size: {0}x{1}", presenter.Width, presenter.Height);
@@ -908,8 +909,10 @@ namespace Aether.Editor
                 }
             }
 
-            if (result.StrideGpuPresent)
-                Console.WriteLine("stride gpu: device created (RTT copy not yet wired; software still presenting)");
+            if (presenter.ActivePath == ViewportPresenter.StrideRttPath)
+                Console.WriteLine("stride gpu: presenting via stride-rtt (offscreen Texture.GetData)");
+            else
+                Console.WriteLine("stride gpu: software-writeablebitmap fallback (expected on ubuntu CI without Vulkan)");
 
             Console.WriteLine("headless stride ok");
             return 0;

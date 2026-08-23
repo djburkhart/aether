@@ -32,7 +32,9 @@ namespace Aether.Editor
         {
             get
             {
-                string gpu = Result.GraphicsDeviceCreated ? "Stride GPU ready" : "Stride GPU: no";
+                string gpu = Presenter.ActivePath == ViewportPresenter.StrideRttPath
+                    ? "Stride GPU rtt"
+                    : (StrideRttPresenter.DeviceReady ? "Stride GPU ready" : "Stride GPU: no");
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
                     " · #2741 open";

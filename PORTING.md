@@ -756,7 +756,7 @@ dotnet run -c Release --project src/Aether.Editor -- --headless-session
 
 # Stride viewport (live center pane)
 
-The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG. Not play-in-editor. #2741 is still open.**
+The Viewport is a **live present surface** in a DCC dock: center document, tools around it. **Not WYSIWYG. Not play-in-editor. #2741 is still open** — this is Aether's Image control, not an official Avalonia Game control.
 
 ## Layout
 
@@ -775,13 +775,14 @@ Opening a `.lvl` does not replace the center Viewport. Level stays a left tool.
 
 | Path | Status |
 |---|---|
-| **`software-writeablebitmap`** (live) | CPU BGRA: pulsing clear + rotating wireframe cube. Copied into an Avalonia `WriteableBitmap` / `Image` on a `DispatcherTimer` (~30 Hz). Does not steal mouse from other panes. Resizes with the dock (clamped). |
-| **`stride-rtt`** | Same control. `StrideGpuFrameSource.TryRender` is the switch point. Returns false until a Stride graphics device exists. |
-| Stride GPU on this Linux CI | `Game` + `GameContextHeadless` → `GameWindowHeadless`, then **`Failed to create vulkan instance: ErrorIncompatibleDriver`**. Null graphics backend was removed in 4.4. |
-| Official Avalonia Game control | **#2741 still open.** This pane is Aether's presenter, not that control. |
-| HWND / NativeControlHost | Not added. Would be a Windows-only extra; ubuntu `net10.0` must keep building. |
+| **`software-writeablebitmap`** (live on ubuntu CI) | CPU BGRA: pulsing clear + gold wireframe cube. Copied into an Avalonia `WriteableBitmap` / `Image` on a `DispatcherTimer` (~30 Hz). Does not steal mouse from other panes. Resizes with the dock (clamped). |
+| **`stride-rtt`** (same Image control) | `StrideRttPresenter` calls `GraphicsDevice.New` (no `Game.Run` loop), draws a lit cyan cube to an offscreen `Texture`, `GetData` → BGRA. Clear is dark navy so it is visually distinct from the software pulse. |
+| Stride GPU on ubuntu CI | `GraphicsDevice.New` fails (`Failed to create vulkan instance: ErrorIncompatibleDriver`). Null graphics was removed in 4.4. **CI is expected to stay on `software-writeablebitmap`.** Headless prints `stride-rtt skipped: …`. |
+| Windows / a machine with D3D or Vulkan | `--headless-session` should print `viewport path: stride-rtt` and `viewport frames: N`. `Aether.Stride` sets `StridePlatform` from the OS (Windows → Direct3D11, Linux → Vulkan). |
+| Official Avalonia Game control | **#2741 still open.** |
+| HWND / NativeControlHost | Not added. RTT is the cross-platform path. |
 
-Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and a non-empty bitmap, and checks the dock has Viewport in the center with Objects / Level / Script / Properties / History around it.
+Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and a non-empty bitmap, logs `stride-rtt attempted / skipped / ready`, and checks the dock has Viewport in the center with Objects / Level / Script / Properties / History around it.
 
 ## What we tried (Stride embed)
 
@@ -789,8 +790,8 @@ Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and
 |---|---|
 | `Stride.Engine` **4.3.0.2507** | No `GameContextHeadless`. |
 | `Stride.Engine` **4.4.0-beta5** | Chosen. Headless window types exist. |
-| Render-to-texture → WriteableBitmap | Preferred present path. Blocked here by Vulkan device creation. Hook is `StrideGpuFrameSource`. |
-| `Game.Run(GameContextHeadless)` | Constructs window, then fails at `GraphicsAdapterFactory`. Probe calls `Exit` on `GameStarted` so a GPU host would not hang in the game loop. |
+| `GraphicsDevice.New` + `GraphicsContext` + offscreen `Texture.GetData` | Implemented in `StrideRttPresenter`. Device init is what fails on this Linux host. Shader is a small SDSL lit cube compiled by the local EffectCompiler. If the shader fails after a device exists, the path still presents a GPU navy clear. |
+| `Game.Run(GameContextHeadless)` | Still used by `StrideHost.Probe` (one-shot). The RTT presenter does **not** sit in that loop. |
 | WPF `GameEngineHost` HWND | Windows-only. Not in this cut. |
 | AvaStride | Opposite direction (Avalonia inside the game). |
 
@@ -798,9 +799,8 @@ Headless CI ticks the presenter without a display, asserts `frameCount >= 1` and
 
 ## Next cut
 
-1. On a machine with a device: implement `StrideGpuFrameSource` (offscreen target → BGRA copy). The Image control stays.
-2. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
-3. Only then replace `NullGameEngine`.
+1. Re-check #2741 for an official Avalonia Game control; do not invent a second HWND stack unless that is all Windows can do.
+2. Only then replace `NullGameEngine` and bind Level GameObjects.
 
 ```bash
 dotnet run -c Release --project src/Aether.Editor -- --headless-session
