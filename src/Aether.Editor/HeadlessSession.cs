@@ -35,7 +35,8 @@ namespace Aether.Editor
     /// Constructs the same EditorSession the window hosts and proves selection,
     /// ATF descriptors, DomNode mutation, HistoryContext undo,
     /// DomXml Open/Save round-trip, Viewport CPU pick of Level placeholders,
-    /// and a headless translate-gizmo +X / Undo of PointLight.</summary>
+    /// a headless translate-gizmo +X / Undo of PointLight, and a documented
+    /// Viewport camera orbit that moves PointLight's pick pixel.</summary>
     internal static class HeadlessSession
     {
         public static int Run()
@@ -619,6 +620,10 @@ namespace Aether.Editor
             if (translateCode != 0)
                 return translateCode;
 
+            int cameraCode = ProveViewportCamera(session, "load");
+            if (cameraCode != 0)
+                return cameraCode;
+
             light = session.Level.Find("PointLight");
             if (light == null)
             {
@@ -1148,6 +1153,10 @@ namespace Aether.Editor
             if (translateCode != 0)
                 return translateCode;
 
+            int cameraCode = ProveViewportCamera(session, "viewport ticks");
+            if (cameraCode != 0)
+                return cameraCode;
+
             Console.WriteLine("headless stride ok");
             return 0;
         }
@@ -1197,7 +1206,7 @@ namespace Aether.Editor
                 return 137;
             }
 
-            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(session.Level.BoundScene);
+            ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
             Vec3F tip = TranslateGizmo.HandleCenter(light.WorldTranslation, TranslateAxis.X);
             float pixelX, pixelY;
             if (ViewportSceneCamera.TryProject(frame, tip, presenter.Width, presenter.Height, out pixelX, out pixelY))
@@ -1294,6 +1303,155 @@ namespace Aether.Editor
         }
 
         /// <summary>
+        /// Print the default ViewportCamera, apply the documented orbit + zoom,
+        /// show that PointLight's projected pixel moved, pick it at the new
+        /// pixel, then prove gizmo +X / Undo still works. CPU only.</summary>
+        private static int ProveViewportCamera(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw during camera after {0}: {1}", afterLabel, ex.Message);
+                return 147;
+            }
+
+            Console.WriteLine(
+                "viewport camera bindings: orbit=right-drag|alt-left  pan=middle-drag|shift-right  zoom=wheel");
+            Console.WriteLine(
+                "viewport camera path: ViewportSession.OrbitBy(yaw=+{0:0.###}, pitch=+{1:0.###}) + ZoomBy(+{2:0.###}) (CPU, no mouse/GPU)",
+                ViewportCamera.DocumentedOrbitYaw,
+                ViewportCamera.DocumentedOrbitPitch,
+                ViewportCamera.DocumentedZoomDelta);
+
+            ViewportCamera camera = session.Viewport.Camera;
+            PrintCamera("default", camera);
+
+            BoundSceneObject? light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: bound scene missing PointLight for camera orbit after {0}.", afterLabel);
+                return 148;
+            }
+
+            int width = presenter.Width;
+            int height = presenter.Height;
+            ViewportCameraFrame beforeFrame = camera.ToFrame();
+            float oldX, oldY;
+            if (!ViewportSceneCamera.TryProject(beforeFrame, light.WorldTranslation, width, height, out oldX, out oldY))
+            {
+                Console.Error.WriteLine("Error: could not project PointLight before orbit after {0}.", afterLabel);
+                return 149;
+            }
+            Console.WriteLine(
+                "viewport pick PointLight pixel before orbit: {0:0.#},{1:0.#} of {2}x{3}",
+                oldX, oldY, width, height);
+
+            if (!session.Viewport.OrbitBy(ViewportCamera.DocumentedOrbitYaw, ViewportCamera.DocumentedOrbitPitch))
+            {
+                Console.Error.WriteLine("Error: OrbitBy failed after {0}.", afterLabel);
+                return 150;
+            }
+            if (!session.Viewport.ZoomBy(ViewportCamera.DocumentedZoomDelta))
+            {
+                Console.Error.WriteLine("Error: ZoomBy failed after {0}.", afterLabel);
+                return 151;
+            }
+
+            PrintCamera("after orbit", camera);
+
+            light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: PointLight missing after orbit after {0}.", afterLabel);
+                return 148;
+            }
+
+            ViewportCameraFrame afterFrame = camera.ToFrame();
+            float newX, newY;
+            if (!ViewportSceneCamera.TryProject(afterFrame, light.WorldTranslation, width, height, out newX, out newY))
+            {
+                Console.Error.WriteLine("Error: could not project PointLight after orbit after {0}.", afterLabel);
+                return 152;
+            }
+            Console.WriteLine(
+                "viewport pick PointLight pixel after orbit: {0:0.#},{1:0.#} of {2}x{3}",
+                newX, newY, width, height);
+
+            float movedX = newX - oldX;
+            float movedY = newY - oldY;
+            if (movedX * movedX + movedY * movedY < 4f)
+            {
+                Console.Error.WriteLine(
+                    "Error: PointLight pick pixel did not move after orbit after {0} (still {1:0.#},{2:0.#}).",
+                    afterLabel, newX, newY);
+                return 153;
+            }
+
+            LevelNodeItem? oldHit = session.Level.PickAt(oldX, oldY, width, height);
+            Console.WriteLine(
+                "viewport pick at old PointLight pixel after orbit: {0}",
+                oldHit != null ? oldHit.Name : "miss");
+
+            LevelNodeItem? newHit = session.Level.PickAt(newX, newY, width, height);
+            Console.WriteLine(
+                "viewport pick at new PointLight pixel after orbit: {0}",
+                newHit != null ? newHit.Name : "(none)");
+            if (newHit == null)
+            {
+                Console.Error.WriteLine(
+                    "Error: pixel pick through PointLight after orbit after {0} missed every placeholder.",
+                    afterLabel);
+                return 154;
+            }
+            if (newHit.Name != "PointLight")
+            {
+                Console.WriteLine(
+                    "viewport pick note: closer placeholder {0} won the post-orbit PointLight-center ray; selecting PointLight by name.",
+                    newHit.Name);
+                if (!session.Level.Select("PointLight"))
+                {
+                    Console.Error.WriteLine("Error: could not re-select PointLight after orbit after {0}.", afterLabel);
+                    return 155;
+                }
+            }
+
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw after camera orbit ({0}): {1}", afterLabel, ex.Message);
+                return 156;
+            }
+
+            Console.WriteLine("viewport path after camera: {0}", presenter.ActivePath);
+            Console.WriteLine("headless viewport camera ok after {0}", afterLabel);
+
+            int translateCode = ProveViewportTranslate(session, afterLabel + " after orbit");
+            if (translateCode != 0)
+                return translateCode;
+
+            return 0;
+        }
+
+        private static void PrintCamera(string label, ViewportCamera camera)
+        {
+            Vec3F target = camera.Target;
+            Vec3F eye = camera.Eye;
+            Console.WriteLine(
+                "viewport camera {0}: target={1:0.###},{2:0.###},{3:0.###} yaw={4:0.###} pitch={5:0.###} distance={6:0.###} eye={7:0.###},{8:0.###},{9:0.###}",
+                label,
+                target.X, target.Y, target.Z,
+                camera.Yaw, camera.Pitch, camera.Distance,
+                eye.X, eye.Y, eye.Z);
+        }
+
+        /// <summary>
         /// After LightTest load: pick PointLight by name (and by the documented
         /// projected pixel when that ray hits it first), print that Properties
         /// would see that node, then miss-click to clear. Miss clears selection.
@@ -1321,7 +1479,7 @@ namespace Aether.Editor
                 return 126;
             }
 
-            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(session.Level.BoundScene);
+            ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
             float pixelX, pixelY;
             if (!ViewportSceneCamera.TryProject(frame, light.WorldTranslation, width, height, out pixelX, out pixelY))
             {
@@ -1330,7 +1488,7 @@ namespace Aether.Editor
             }
 
             Console.WriteLine(
-                "viewport pick PointLight pixel: {0:0.#},{1:0.#} of {2}x{3} (same LookAt/perspective as RTT)",
+                "viewport pick PointLight pixel: {0:0.#},{1:0.#} of {2}x{3} (same ViewportCamera as RTT)",
                 pixelX, pixelY, width, height);
 
             LevelNodeItem? pixelHit = session.Level.PickAt(pixelX, pixelY, width, height);

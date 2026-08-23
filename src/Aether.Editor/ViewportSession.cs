@@ -1,3 +1,7 @@
+using System;
+
+using LevelEditorCore;
+
 using Aether.Stride;
 
 namespace Aether.Editor
@@ -5,7 +9,8 @@ namespace Aether.Editor
     /// <summary>
     /// Center Viewport session: live presenter + Stride host probe.
     /// After device init, the Level session attaches StrideGameEngine or
-    /// keeps NullGameEngine.</summary>
+    /// keeps NullGameEngine. Orbit / pan / zoom write the shared
+    /// <see cref="ViewportCamera"/> that pick and RTT already read.</summary>
     public sealed class ViewportSession
     {
         public ViewportSession()
@@ -32,6 +37,60 @@ namespace Aether.Editor
 
         public ViewportPresenter Presenter { get; }
 
+        /// <summary>
+        /// Shared orbit camera. Same instance
+        /// <see cref="ViewportSceneCamera.Current"/>.</summary>
+        public ViewportCamera Camera
+        {
+            get { return ViewportSceneCamera.Current; }
+        }
+
+        /// <summary>Orbit the Viewport camera (radians). Never throws.</summary>
+        public bool OrbitBy(float yawRadians, float pitchRadians)
+        {
+            try
+            {
+                Camera.OrbitBy(yawRadians, pitchRadians);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pan the Viewport camera (world units along camera right/up).
+        /// Never throws.</summary>
+        public bool PanBy(float right, float up)
+        {
+            try
+            {
+                Camera.PanBy(right, up);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Zoom the Viewport camera. Positive delta moves farther.
+        /// Never throws.</summary>
+        public bool ZoomBy(float delta)
+        {
+            try
+            {
+                Camera.ZoomBy(delta);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         public bool Initialized
         {
             get { return Result.Initialized; }
@@ -54,7 +113,7 @@ namespace Aether.Editor
                     : "no level scene";
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
-                    " · " + scene + " · click to pick · drag axis to move · #2741 open";
+                    " · " + scene + " · click to pick · drag axis to move · RMB orbit · MMB pan · wheel zoom · #2741 open";
             }
         }
 

@@ -805,7 +805,7 @@ A left click on the Viewport `Image` CPU-picks the nearest GameObject placeholde
 
 | Piece | Behavior |
 |---|---|
-| Camera | Same LookAtRH / PerspectiveFovRH framing as `StrideRttPresenter.DrawPlaceholders` (`ViewportSceneCamera`). |
+| Camera | Shared `ViewportCamera` (yaw / pitch / distance / target) → LookAtRH / PerspectiveFovRH. Same instance `StrideRttPresenter.DrawPlaceholders` and the translate gizmo use (`ViewportSceneCamera.Current`). |
 | Hit | Ray vs axis-aligned cube at each `BoundSceneObject.WorldTranslation` (half-extents = 1.15 cube × clamped scale). Nearest hit wins. |
 | Miss | Clears `SelectedNode` (and the property grid when Level is active). Documented; not “leave selection”. |
 | Headless | `LevelSession.Select(name)`, `PickAt(pixelX, pixelY, width, height)`, `PickAtNdc(ndcX, ndcY, aspect)`. CI projects PointLight through that camera, prints the selection, then a corner miss. |
@@ -824,6 +824,22 @@ When a GameObject is selected, a three-axis translate gizmo is drawn at its worl
 | Linux / no GPU | Present path stays `software-writeablebitmap`. The move still happens; `Tick` / `TryRender` must not throw. |
 
 Out of scope here: rotate/scale gizmos, snap, multi-select, play-in-editor physics, official Avalonia Game control (#2741).
+
+## Viewport camera (orbit / pan / zoom)
+
+One editable camera. `ViewportSceneCamera.Current` is a `ViewportCamera` (target + yaw around Y + pitch + distance). Default framing is the previous bounds LookAt (`FromBounds`) so PointLight's pick pixel stays the same until the camera moves. Pick, gizmo hit-tests, software overlay, and Stride RTT all read `Current.ToFrame()` — there is no second hardcoded LookAt.
+
+| Binding | Gesture | Headless |
+|---|---|---|
+| **Orbit** | Right-drag, or Alt+left-drag | `ViewportSession.OrbitBy(yaw, pitch)` — documented `+π/4` yaw, `+0.15` pitch |
+| **Pan** | Middle-drag, or Shift+right-drag | `ViewportSession.PanBy(right, up)` (camera-space world units) |
+| **Zoom** | Mouse wheel (scroll up = closer) | `ViewportSession.ZoomBy(delta)` — documented `+2.5` (farther) |
+
+`LevelSession.OrbitBy` / `PanBy` / `ZoomBy` write the same camera. Opening a `.lvl` re-frames from the bound scene. CPU math only; `Tick` / `TryRender` must not throw. Linux without a GPU stays on `software-writeablebitmap`.
+
+Headless prints the default camera (target / yaw / pitch / distance / eye), applies the documented orbit + zoom, prints the new camera, and checks that PointLight's projected pixel moved (old pixel is a miss or a different hit). Then it picks PointLight at the new pixel and repeats gizmo +X / Undo.
+
+Out of scope here: WASD fly-cam, perspective/ortho toggle, camera bookmarks, rotate/scale gizmos, official Avalonia Game control (#2741).
 
 ## Next cut
 

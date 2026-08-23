@@ -200,8 +200,8 @@ namespace Aether.Editor
         }
 
         /// <summary>
-        /// Overlay the selected-object translate gizmo using the same
-        /// LookAtRH / PerspectiveFovRH pick/RTT camera. Safe when no
+        /// Overlay the selected-object translate gizmo using the shared
+        /// ViewportCamera (same LookAt as pick/RTT). Safe when no
         /// GameObject is selected.</summary>
         private static void DrawTranslateGizmo(byte[] pixels, int width, int height)
         {
@@ -210,7 +210,7 @@ namespace Aether.Editor
                 if (!TranslateGizmo.OverlayVisible || width < 1 || height < 1)
                     return;
 
-                ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(TranslateGizmo.OverlayPositions);
+                ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
                 Vec3F origin = TranslateGizmo.OverlayOrigin;
                 DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.X, 40, 40, 230);
                 DrawGizmoAxis(pixels, width, height, frame, origin, TranslateAxis.Y, 40, 210, 50);

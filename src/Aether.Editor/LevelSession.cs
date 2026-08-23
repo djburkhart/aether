@@ -261,10 +261,10 @@ namespace Aether.Editor
 
         /// <summary>
         /// CPU pick of the nearest BoundLevelScene placeholder under an
-        /// image-space pixel (origin top-left). Uses the same LookAtRH /
-        /// PerspectiveFovRH the RTT presenter uses. A miss clears
-        /// <see cref="SelectedNode"/> so the tree and property grid follow.
-        /// Does not require a GraphicsDevice.</summary>
+        /// image-space pixel (origin top-left). Uses
+        /// <see cref="ViewportSceneCamera.Current"/> (same LookAt the RTT
+        /// presenter uses). A miss clears <see cref="SelectedNode"/> so the
+        /// tree and property grid follow. Does not require a GraphicsDevice.</summary>
         public LevelNodeItem? PickAt(double pixelX, double pixelY, int width, int height)
         {
             try
@@ -288,7 +288,7 @@ namespace Aether.Editor
             {
                 if (!TrySelectedOrigin(out Vec3F origin))
                     return null;
-                ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(BoundScene);
+                ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
                 Ray3F ray = ViewportSceneCamera.RayFromPixel(frame, (float)pixelX, (float)pixelY, width, height);
                 TranslateAxis axis;
                 if (!TranslateGizmo.Hit(origin, ray, out axis))
@@ -327,7 +327,7 @@ namespace Aether.Editor
                     axis,
                     gob.Translation,
                     SelectedWorldTranslation(gob),
-                    ViewportSceneCamera.ComputeFrame(BoundScene),
+                    ViewportSceneCamera.CurrentFrame,
                     0f,
                     hasStartT: false);
                 History.Begin("Translate");
@@ -484,6 +484,55 @@ namespace Aether.Editor
         }
 
         /// <summary>
+        /// Orbit the shared Viewport camera (radians). Same state pick, the
+        /// gizmo, and RTT already read. Never throws.</summary>
+        public bool OrbitBy(float yawRadians, float pitchRadians)
+        {
+            try
+            {
+                ViewportSceneCamera.Current.OrbitBy(yawRadians, pitchRadians);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pan the shared Viewport camera (world units along camera right/up).
+        /// Never throws.</summary>
+        public bool PanBy(float right, float up)
+        {
+            try
+            {
+                ViewportSceneCamera.Current.PanBy(right, up);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Zoom the shared Viewport camera. Positive
+        /// <paramref name="delta"/> moves the eye farther from the target.
+        /// Never throws.</summary>
+        public bool ZoomBy(float delta)
+        {
+            try
+            {
+                ViewportSceneCamera.Current.ZoomBy(delta);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Same pick as <see cref="PickAt"/> in NDC (−1..1, y up). Aspect is
         /// the Viewport buffer width/height.</summary>
         public LevelNodeItem? PickAtNdc(float ndcX, float ndcY, float aspect)
@@ -556,6 +605,22 @@ namespace Aether.Editor
             NotifyFileState();
             NotifyHistoryCommands();
             SyncBoundScene();
+            FrameBoundScene();
+        }
+
+        /// <summary>
+        /// Reset the shared Viewport camera to the bounds LookAt for the
+        /// current bound scene. Called on document bind so Open/Load start
+        /// from the same framing pick used before orbit existed.</summary>
+        private void FrameBoundScene()
+        {
+            try
+            {
+                ViewportSceneCamera.Current.FrameFromScene(BoundScene);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         private void ReloadTree()

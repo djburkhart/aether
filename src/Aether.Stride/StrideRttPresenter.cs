@@ -241,15 +241,8 @@ namespace Aether.Stride
 
         private void DrawPlaceholders(int width, int height, ScenePlaceholder[] placeholders)
         {
-            var positions = new Sce.Atf.VectorMath.Vec3F[placeholders.Length];
-            for (int i = 0; i < placeholders.Length; i++)
-            {
-                ScenePlaceholder p = placeholders[i];
-                positions[i] = new Sce.Atf.VectorMath.Vec3F(p.X, p.Y, p.Z);
-            }
-
-            // Same framing ViewportSceneCamera uses for CPU pick (no GPU raycast).
-            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(positions);
+            // Same ViewportCamera ViewportSceneCamera uses for CPU pick (no GPU raycast).
+            ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
             var eye = new Vector3(frame.Eye.X, frame.Eye.Y, frame.Eye.Z);
             var center = new Vector3(frame.Center.X, frame.Center.Y, frame.Center.Z);
 
