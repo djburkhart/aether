@@ -113,7 +113,8 @@ namespace Aether.Editor
                     : "no level scene";
                 return Presenter.ActivePath + " · " + Presenter.FrameCount + " frames · " +
                     Presenter.Width + "×" + Presenter.Height + " · " + gpu +
-                    " · " + scene + " · click to pick · drag axis to move · RMB orbit · MMB pan · wheel zoom · #2741 open";
+                    " · " + scene + " · gizmo " + TranslateGizmo.OverlayMode +
+                    " · W move · E rotate · R scale · click to pick · drag handle · RMB orbit · MMB pan · wheel zoom · #2741 open";
             }
         }
 

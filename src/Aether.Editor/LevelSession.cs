@@ -52,6 +52,18 @@ namespace Aether.Editor
         /// <see cref="ApplyAxisDelta"/>.</summary>
         public const float DocumentedTranslateDeltaX = 1.5f;
 
+        /// <summary>
+        /// Documented headless +Y rotation (radians) applied by
+        /// <see cref="BeginRotateDrag(TranslateAxis)"/> +
+        /// <see cref="ApplyRotateDelta"/>. +π/4.</summary>
+        public const float DocumentedRotateDeltaY = (float)Math.PI / 4f;
+
+        /// <summary>
+        /// Documented headless +X scale delta applied by
+        /// <see cref="BeginScaleDrag(TranslateAxis)"/> +
+        /// <see cref="ApplyScaleDelta"/>. Additive on that axis.</summary>
+        public const float DocumentedScaleDeltaX = 0.5f;
+
         public HistoryContext History { get; private set; } = null!;
 
         public SelectionContext Selection { get; private set; } = null!;
@@ -134,7 +146,7 @@ namespace Aether.Editor
                     Selection.Selection.Clear();
 
                 if (m_drag != null && (value == null || !object.ReferenceEquals(value.Node, m_drag.Node)))
-                    CancelAxisDrag();
+                    CancelGizmoDrag();
 
                 PushGizmo();
                 OnPropertyChanged(nameof(StatusText));
@@ -280,8 +292,44 @@ namespace Aether.Editor
         }
 
         /// <summary>
-        /// CPU hit-test of the selected object's translate gizmo. Null when
-        /// nothing is selected or the ray misses every axis handle.</summary>
+        /// Which gizmo the Viewport draws and hit-tests. W / E / R (or the
+        /// Viewport toolbar) switch this. Headless
+        /// <see cref="BeginAxisDrag(TranslateAxis)"/> /
+        /// <see cref="BeginRotateDrag"/> / <see cref="BeginScaleDrag"/>
+        /// stay explicit.</summary>
+        public GizmoMode GizmoMode
+        {
+            get { return m_gizmoMode; }
+            set { SetGizmoMode(value); }
+        }
+
+        /// <summary>
+        /// Switch the Viewport gizmo. Cancels an open drag. Never throws.</summary>
+        public bool SetGizmoMode(GizmoMode mode)
+        {
+            try
+            {
+                if (m_gizmoMode == mode)
+                {
+                    PushGizmo();
+                    return true;
+                }
+                if (m_drag != null)
+                    CancelGizmoDrag();
+                m_gizmoMode = mode;
+                PushGizmo();
+                OnPropertyChanged(nameof(GizmoMode));
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// CPU hit-test of the selected object's current-mode gizmo. Null when
+        /// nothing is selected or the ray misses every handle / ring.</summary>
         public TranslateAxis? HitGizmoAt(double pixelX, double pixelY, int width, int height)
         {
             try
@@ -291,9 +339,20 @@ namespace Aether.Editor
                 ViewportCameraFrame frame = ViewportSceneCamera.CurrentFrame;
                 Ray3F ray = ViewportSceneCamera.RayFromPixel(frame, (float)pixelX, (float)pixelY, width, height);
                 TranslateAxis axis;
-                if (!TranslateGizmo.Hit(origin, ray, out axis))
-                    return null;
-                return axis;
+                bool hit;
+                switch (m_gizmoMode)
+                {
+                    case GizmoMode.Rotate:
+                        hit = RotateGizmo.Hit(origin, ray, out axis);
+                        break;
+                    case GizmoMode.Scale:
+                        hit = ScaleGizmo.Hit(origin, ray, out axis);
+                        break;
+                    default:
+                        hit = TranslateGizmo.Hit(origin, ray, out axis);
+                        break;
+                }
+                return hit ? axis : null;
             }
             catch (Exception)
             {
@@ -305,6 +364,13 @@ namespace Aether.Editor
         /// True when a translate-axis drag is open (History transaction in
         /// progress). Headless and the Viewport mouse path share this.</summary>
         public bool IsAxisDragging
+        {
+            get { return m_drag != null && m_drag.Kind == GizmoDragKind.Translate; }
+        }
+
+        /// <summary>
+        /// True when any gizmo drag (translate / rotate / scale) is open.</summary>
+        public bool IsGizmoDragging
         {
             get { return m_drag != null; }
         }
@@ -320,12 +386,16 @@ namespace Aether.Editor
                 IGameObject? gob = SelectedGameObject();
                 if (gob == null || !CanTranslate(gob))
                     return false;
-                CancelAxisDrag();
-                m_drag = new AxisDrag(
+                CancelGizmoDrag();
+                m_drag = new GizmoDrag(
+                    GizmoDragKind.Translate,
                     gob,
                     gob.As<DomNode>()!,
                     axis,
                     gob.Translation,
+                    gob.Rotation,
+                    gob.Scale,
+                    gob.TransformationType,
                     SelectedWorldTranslation(gob),
                     ViewportSceneCamera.CurrentFrame,
                     0f,
@@ -335,7 +405,7 @@ namespace Aether.Editor
             }
             catch (Exception)
             {
-                CancelAxisDrag();
+                CancelGizmoDrag();
                 return false;
             }
         }
@@ -357,7 +427,7 @@ namespace Aether.Editor
                 if (!TranslateGizmo.TryProjectOntoAxis(
                     ray, m_drag.WorldOrigin, TranslateGizmo.AxisDirection(axis), m_drag.Frame.Eye, out startT))
                 {
-                    CancelAxisDrag();
+                    CancelGizmoDrag();
                     return false;
                 }
                 m_drag.StartT = startT;
@@ -366,7 +436,7 @@ namespace Aether.Editor
             }
             catch (Exception)
             {
-                CancelAxisDrag();
+                CancelGizmoDrag();
                 return false;
             }
         }
@@ -380,7 +450,7 @@ namespace Aether.Editor
         {
             try
             {
-                if (m_drag == null)
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Translate)
                     return false;
                 Vec3F world = TranslateGizmo.AxisDirection(m_drag.Axis) * worldDelta;
                 m_drag.GameObject.Translation = ApplyWorldDelta(
@@ -401,7 +471,7 @@ namespace Aether.Editor
         {
             try
             {
-                if (m_drag == null || !m_drag.HasStartT)
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Translate || !m_drag.HasStartT)
                     return false;
                 Ray3F ray = ViewportSceneCamera.RayFromPixel(
                     m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
@@ -430,33 +500,23 @@ namespace Aether.Editor
 
         /// <summary>
         /// Commit the open translate transaction (or cancel if Translation
-        /// did not change). Undo restores the pre-drag position.</summary>
+        /// did not change). Undo restores the pre-drag position. Also ends
+        /// an open rotate/scale drag.</summary>
         public bool EndAxisDrag()
         {
-            try
-            {
-                if (m_drag == null)
-                    return false;
+            return EndGizmoDrag();
+        }
 
-                bool changed = !NearlyEqual(m_drag.GameObject.Translation, m_drag.StartTranslation);
-                if (History.InTransaction)
-                {
-                    if (changed)
-                        History.End();
-                    else
-                        History.Cancel();
-                }
-                m_drag = null;
-                SyncBoundScene();
-                NotifyHistoryCommands();
-                NotifyFileState();
-                return true;
-            }
-            catch (Exception)
-            {
-                CancelAxisDrag();
-                return false;
-            }
+        /// <summary>Commit or cancel an open rotate drag. Same as <see cref="EndGizmoDrag"/>.</summary>
+        public bool EndRotateDrag()
+        {
+            return EndGizmoDrag();
+        }
+
+        /// <summary>Commit or cancel an open scale drag. Same as <see cref="EndGizmoDrag"/>.</summary>
+        public bool EndScaleDrag()
+        {
+            return EndGizmoDrag();
         }
 
         /// <summary>
@@ -475,6 +535,255 @@ namespace Aether.Editor
                     "Translate");
                 NotifyHistoryCommands();
                 NotifyFileState();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start a rotate drag on <paramref name="axis"/>. Records the
+        /// current Rotation and opens one History transaction. LightTest
+        /// PointLight only has Translation flags; this enables
+        /// <see cref="TransformationTypes.Rotation"/> so
+        /// <see cref="ITransformable.Rotation"/> accepts the write.
+        /// Used by headless <see cref="ApplyRotateDelta"/> (no mouse).</summary>
+        public bool BeginRotateDrag(TranslateAxis axis)
+        {
+            try
+            {
+                IGameObject? gob = SelectedGameObject();
+                if (gob == null || !CanManipulate(gob))
+                    return false;
+                CancelGizmoDrag();
+                m_drag = new GizmoDrag(
+                    GizmoDragKind.Rotate,
+                    gob,
+                    gob.As<DomNode>()!,
+                    axis,
+                    gob.Translation,
+                    gob.Rotation,
+                    gob.Scale,
+                    gob.TransformationType,
+                    SelectedWorldTranslation(gob),
+                    ViewportSceneCamera.CurrentFrame,
+                    0f,
+                    hasStartT: false);
+                History.Begin("Rotate");
+                EnsureTransformFlag(gob, TransformationTypes.Rotation);
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelGizmoDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start a rotate drag from an image-space press. Projects that
+        /// pixel onto the <paramref name="axis"/> ring plane so later
+        /// <see cref="ApplyRotateDrag"/> writes Rotation.</summary>
+        public bool BeginRotateDrag(TranslateAxis axis, double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (!BeginRotateDrag(axis) || m_drag == null)
+                    return false;
+
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float startAngle;
+                if (!RotateGizmo.TryProjectAngle(
+                    ray, m_drag.WorldOrigin, TranslateGizmo.AxisDirection(axis), out startAngle))
+                {
+                    CancelGizmoDrag();
+                    return false;
+                }
+                m_drag.StartT = startAngle;
+                m_drag.HasStartT = true;
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelGizmoDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Documented headless rotate: add <paramref name="radians"/> to the
+        /// Euler component for the drag axis and write local
+        /// <see cref="ITransformable.Rotation"/>. Requires
+        /// <see cref="BeginRotateDrag(TranslateAxis)"/>.</summary>
+        public bool ApplyRotateDelta(float radians)
+        {
+            try
+            {
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Rotate)
+                    return false;
+                m_drag.GameObject.Rotation = AddAxisComponent(
+                    m_drag.StartRotation, m_drag.Axis, radians);
+                SyncBoundScene();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pointer-move half of a rotate drag. Projects the pixel onto the
+        /// captured axis plane and writes Rotation. CPU only.</summary>
+        public bool ApplyRotateDrag(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Rotate || !m_drag.HasStartT)
+                    return false;
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float angle;
+                if (!RotateGizmo.TryProjectAngle(
+                    ray,
+                    m_drag.WorldOrigin,
+                    TranslateGizmo.AxisDirection(m_drag.Axis),
+                    out angle))
+                {
+                    return false;
+                }
+                float delta = WrapAngle(angle - m_drag.StartT);
+                m_drag.GameObject.Rotation = AddAxisComponent(
+                    m_drag.StartRotation, m_drag.Axis, delta);
+                SyncBoundScene();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start a scale drag on <paramref name="axis"/>. Records the
+        /// current Scale and opens one History transaction. LightTest
+        /// PointLight only has Translation flags; this enables
+        /// <see cref="TransformationTypes.Scale"/> so
+        /// <see cref="ITransformable.Scale"/> accepts the write.
+        /// Used by headless <see cref="ApplyScaleDelta"/> (no mouse).</summary>
+        public bool BeginScaleDrag(TranslateAxis axis)
+        {
+            try
+            {
+                IGameObject? gob = SelectedGameObject();
+                if (gob == null || !CanManipulate(gob))
+                    return false;
+                CancelGizmoDrag();
+                m_drag = new GizmoDrag(
+                    GizmoDragKind.Scale,
+                    gob,
+                    gob.As<DomNode>()!,
+                    axis,
+                    gob.Translation,
+                    gob.Rotation,
+                    gob.Scale,
+                    gob.TransformationType,
+                    SelectedWorldTranslation(gob),
+                    ViewportSceneCamera.CurrentFrame,
+                    0f,
+                    hasStartT: false);
+                History.Begin("Scale");
+                EnsureTransformFlag(gob, TransformationTypes.Scale);
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelGizmoDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start a scale drag from an image-space press. Projects that
+        /// pixel onto <paramref name="axis"/> so later
+        /// <see cref="ApplyScaleDrag"/> writes Scale along the axis.</summary>
+        public bool BeginScaleDrag(TranslateAxis axis, double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (!BeginScaleDrag(axis) || m_drag == null)
+                    return false;
+
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float startT;
+                if (!ScaleGizmo.TryProjectOntoAxis(
+                    ray, m_drag.WorldOrigin, ScaleGizmo.AxisDirection(axis), m_drag.Frame.Eye, out startT))
+                {
+                    CancelGizmoDrag();
+                    return false;
+                }
+                m_drag.StartT = startT;
+                m_drag.HasStartT = true;
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelGizmoDrag();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Documented headless scale: add <paramref name="axisDelta"/> to the
+        /// Scale component for the drag axis and write local
+        /// <see cref="ITransformable.Scale"/>. Requires
+        /// <see cref="BeginScaleDrag(TranslateAxis)"/>.</summary>
+        public bool ApplyScaleDelta(float axisDelta)
+        {
+            try
+            {
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Scale)
+                    return false;
+                m_drag.GameObject.Scale = AddAxisComponentClamped(
+                    m_drag.StartScale, m_drag.Axis, axisDelta, MinScale);
+                SyncBoundScene();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Pointer-move half of a scale drag. Projects the pixel onto the
+        /// captured axis and writes Scale. CPU only.</summary>
+        public bool ApplyScaleDrag(double pixelX, double pixelY, int width, int height)
+        {
+            try
+            {
+                if (m_drag == null || m_drag.Kind != GizmoDragKind.Scale || !m_drag.HasStartT)
+                    return false;
+                Ray3F ray = ViewportSceneCamera.RayFromPixel(
+                    m_drag.Frame, (float)pixelX, (float)pixelY, width, height);
+                float t;
+                if (!ScaleGizmo.TryProjectOntoAxis(
+                    ray,
+                    m_drag.WorldOrigin,
+                    ScaleGizmo.AxisDirection(m_drag.Axis),
+                    m_drag.Frame.Eye,
+                    out t))
+                {
+                    return false;
+                }
+                float delta = t - m_drag.StartT;
+                m_drag.GameObject.Scale = AddAxisComponentClamped(
+                    m_drag.StartScale, m_drag.Axis, delta, MinScale);
+                SyncBoundScene();
                 return true;
             }
             catch (Exception)
@@ -583,6 +892,7 @@ namespace Aether.Editor
 
         private void BindDocument(DomNode document, string? filePath)
         {
+            CancelGizmoDrag();
             UnhookHistory();
 
             Document = document;
@@ -820,12 +1130,63 @@ namespace Aether.Editor
 
         private static bool CanTranslate(IGameObject gob)
         {
-            if (gob == null)
-                return false;
-            if (gob.IsLocked)
+            if (!CanManipulate(gob))
                 return false;
             return (gob.TransformationType & TransformationTypes.Translation) != 0;
         }
+
+        private static bool CanManipulate(IGameObject gob)
+        {
+            return gob != null && !gob.IsLocked;
+        }
+
+        private static void EnsureTransformFlag(IGameObject gob, TransformationTypes flag)
+        {
+            if (gob == null)
+                return;
+            if ((gob.TransformationType & flag) == 0)
+                gob.TransformationType = gob.TransformationType | flag;
+        }
+
+        private static Vec3F AddAxisComponent(Vec3F value, TranslateAxis axis, float delta)
+        {
+            switch (axis)
+            {
+                case TranslateAxis.X:
+                    return new Vec3F(value.X + delta, value.Y, value.Z);
+                case TranslateAxis.Y:
+                    return new Vec3F(value.X, value.Y + delta, value.Z);
+                default:
+                    return new Vec3F(value.X, value.Y, value.Z + delta);
+            }
+        }
+
+        private static Vec3F AddAxisComponentClamped(Vec3F value, TranslateAxis axis, float delta, float min)
+        {
+            switch (axis)
+            {
+                case TranslateAxis.X:
+                    return new Vec3F(Math.Max(min, value.X + delta), value.Y, value.Z);
+                case TranslateAxis.Y:
+                    return new Vec3F(value.X, Math.Max(min, value.Y + delta), value.Z);
+                default:
+                    return new Vec3F(value.X, value.Y, Math.Max(min, value.Z + delta));
+            }
+        }
+
+        /// <summary>Wrap a delta into (−π, π] so a ring drag does not jump.</summary>
+        private static float WrapAngle(float radians)
+        {
+            const float pi = (float)Math.PI;
+            const float twoPi = (float)(Math.PI * 2.0);
+            while (radians > pi)
+                radians -= twoPi;
+            while (radians <= -pi)
+                radians += twoPi;
+            return radians;
+        }
+
+        private const float MinScale = 0.05f;
 
         private bool TrySelectedOrigin(out Vec3F origin)
         {
@@ -857,7 +1218,7 @@ namespace Aether.Editor
                 IGameObject? gob = SelectedGameObject();
                 if (gob != null)
                     origin = SelectedWorldTranslation(gob);
-                TranslateGizmo.SetOverlay(positions, origin);
+                TranslateGizmo.SetOverlay(positions, origin, m_gizmoMode);
             }
             catch (Exception)
             {
@@ -865,7 +1226,51 @@ namespace Aether.Editor
             }
         }
 
-        private void CancelAxisDrag()
+        /// <summary>
+        /// Commit the open gizmo transaction (or cancel if the written
+        /// TRS component did not change). Undo restores the pre-drag value.</summary>
+        public bool EndGizmoDrag()
+        {
+            try
+            {
+                if (m_drag == null)
+                    return false;
+
+                bool changed = DragChanged(m_drag);
+                if (History.InTransaction)
+                {
+                    if (changed)
+                        History.End();
+                    else
+                        History.Cancel();
+                }
+                m_drag = null;
+                SyncBoundScene();
+                NotifyHistoryCommands();
+                NotifyFileState();
+                return true;
+            }
+            catch (Exception)
+            {
+                CancelGizmoDrag();
+                return false;
+            }
+        }
+
+        private static bool DragChanged(GizmoDrag drag)
+        {
+            switch (drag.Kind)
+            {
+                case GizmoDragKind.Rotate:
+                    return !NearlyEqual(drag.GameObject.Rotation, drag.StartRotation);
+                case GizmoDragKind.Scale:
+                    return !NearlyEqual(drag.GameObject.Scale, drag.StartScale);
+                default:
+                    return !NearlyEqual(drag.GameObject.Translation, drag.StartTranslation);
+            }
+        }
+
+        private void CancelGizmoDrag()
         {
             try
             {
@@ -926,34 +1331,54 @@ namespace Aether.Editor
         private LevelNodeItem? m_selectedNode;
         private string? m_filePath;
         private bool m_historyHooked;
-        private AxisDrag? m_drag;
+        private GizmoMode m_gizmoMode = GizmoMode.Translate;
+        private GizmoDrag? m_drag;
 
-        private sealed class AxisDrag
+        private enum GizmoDragKind
         {
-            public AxisDrag(
+            Translate,
+            Rotate,
+            Scale
+        }
+
+        private sealed class GizmoDrag
+        {
+            public GizmoDrag(
+                GizmoDragKind kind,
                 IGameObject gameObject,
                 DomNode node,
                 TranslateAxis axis,
                 Vec3F startTranslation,
+                Vec3F startRotation,
+                Vec3F startScale,
+                TransformationTypes startType,
                 Vec3F worldOrigin,
                 ViewportCameraFrame frame,
                 float startT,
                 bool hasStartT)
             {
+                Kind = kind;
                 GameObject = gameObject;
                 Node = node;
                 Axis = axis;
                 StartTranslation = startTranslation;
+                StartRotation = startRotation;
+                StartScale = startScale;
+                StartType = startType;
                 WorldOrigin = worldOrigin;
                 Frame = frame;
                 StartT = startT;
                 HasStartT = hasStartT;
             }
 
+            public GizmoDragKind Kind { get; }
             public IGameObject GameObject { get; }
             public DomNode Node { get; }
             public TranslateAxis Axis { get; }
             public Vec3F StartTranslation { get; }
+            public Vec3F StartRotation { get; }
+            public Vec3F StartScale { get; }
+            public TransformationTypes StartType { get; }
             public Vec3F WorldOrigin { get; }
             public ViewportCameraFrame Frame { get; }
             public float StartT { get; set; }

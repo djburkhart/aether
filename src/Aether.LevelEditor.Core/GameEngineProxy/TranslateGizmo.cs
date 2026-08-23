@@ -129,11 +129,28 @@ namespace LevelEditorCore
         }
 
         /// <summary>
+        /// Which gizmo presenters should draw. Headless rotate/scale APIs
+        /// do not require this to match.</summary>
+        public static GizmoMode OverlayMode
+        {
+            get { return s_overlayMode; }
+        }
+
+        /// <summary>
         /// Presenters draw the gizmo at <paramref name="selectedOrigin"/> when
         /// it is set. <paramref name="positions"/> stay the bound-scene world
         /// translations; LookAt comes from <see cref="ViewportSceneCamera.Current"/>.</summary>
         public static void SetOverlay(IReadOnlyList<Vec3F> positions, Vec3F? selectedOrigin)
         {
+            SetOverlay(positions, selectedOrigin, s_overlayMode);
+        }
+
+        /// <summary>
+        /// Same as <see cref="SetOverlay(IReadOnlyList{Vec3F},Vec3F?)"/> and
+        /// records <paramref name="mode"/> for software / RTT overlays.</summary>
+        public static void SetOverlay(IReadOnlyList<Vec3F> positions, Vec3F? selectedOrigin, GizmoMode mode)
+        {
+            s_overlayMode = mode;
             if (positions == null || positions.Count == 0)
                 s_overlayPositions = Array.Empty<Vec3F>();
             else
@@ -161,6 +178,7 @@ namespace LevelEditorCore
             s_overlayPositions = Array.Empty<Vec3F>();
             s_overlayOrigin = Vec3F.ZeroVector;
             s_overlayVisible = false;
+            s_overlayMode = GizmoMode.Translate;
         }
 
         private static void TestAxis(
@@ -201,5 +219,6 @@ namespace LevelEditorCore
         private static Vec3F[] s_overlayPositions = Array.Empty<Vec3F>();
         private static Vec3F s_overlayOrigin;
         private static bool s_overlayVisible;
+        private static GizmoMode s_overlayMode = GizmoMode.Translate;
     }
 }

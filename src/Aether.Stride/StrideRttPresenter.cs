@@ -263,10 +263,10 @@ namespace Aether.Stride
                 DrawMesh(world, view, projection, PlaceholderColor(i));
             }
 
-            DrawTranslateGizmo(view, projection);
+            DrawGizmo(view, projection);
         }
 
-        private void DrawTranslateGizmo(Matrix view, Matrix projection)
+        private void DrawGizmo(Matrix view, Matrix projection)
         {
             try
             {
@@ -274,9 +274,24 @@ namespace Aether.Stride
                     return;
 
                 Sce.Atf.VectorMath.Vec3F origin = TranslateGizmo.OverlayOrigin;
-                DrawGizmoHandle(view, projection, origin, TranslateAxis.X, GizmoRed);
-                DrawGizmoHandle(view, projection, origin, TranslateAxis.Y, GizmoGreen);
-                DrawGizmoHandle(view, projection, origin, TranslateAxis.Z, GizmoBlue);
+                switch (TranslateGizmo.OverlayMode)
+                {
+                    case GizmoMode.Rotate:
+                        DrawRotateRing(view, projection, origin, TranslateAxis.X, GizmoRed);
+                        DrawRotateRing(view, projection, origin, TranslateAxis.Y, GizmoGreen);
+                        DrawRotateRing(view, projection, origin, TranslateAxis.Z, GizmoBlue);
+                        break;
+                    case GizmoMode.Scale:
+                        DrawScaleHandle(view, projection, origin, TranslateAxis.X, GizmoRed);
+                        DrawScaleHandle(view, projection, origin, TranslateAxis.Y, GizmoGreen);
+                        DrawScaleHandle(view, projection, origin, TranslateAxis.Z, GizmoBlue);
+                        break;
+                    default:
+                        DrawGizmoHandle(view, projection, origin, TranslateAxis.X, GizmoRed);
+                        DrawGizmoHandle(view, projection, origin, TranslateAxis.Y, GizmoGreen);
+                        DrawGizmoHandle(view, projection, origin, TranslateAxis.Z, GizmoBlue);
+                        break;
+                }
             }
             catch (Exception)
             {
@@ -304,6 +319,44 @@ namespace Aether.Stride
             var tipWorld = Matrix.Scaling(handleScale, handleScale, handleScale) *
                 Matrix.Translation(tip.X, tip.Y, tip.Z);
             DrawMesh(tipWorld, view, projection, color);
+        }
+
+        private void DrawScaleHandle(Matrix view, Matrix projection, Sce.Atf.VectorMath.Vec3F origin, TranslateAxis axis, Color4 color)
+        {
+            Sce.Atf.VectorMath.Vec3F dir = ScaleGizmo.AxisDirection(axis);
+            float cube = ViewportSceneCamera.CubeSize;
+            float shaftScale = (ScaleGizmo.ShaftHalf * 2f) / cube;
+            float shaftLen = ScaleGizmo.AxisLength / cube;
+            var shaftWorld = Matrix.Scaling(
+                    dir.X != 0f ? shaftLen : shaftScale,
+                    dir.Y != 0f ? shaftLen : shaftScale,
+                    dir.Z != 0f ? shaftLen : shaftScale) *
+                Matrix.Translation(
+                    origin.X + dir.X * ScaleGizmo.AxisLength * 0.5f,
+                    origin.Y + dir.Y * ScaleGizmo.AxisLength * 0.5f,
+                    origin.Z + dir.Z * ScaleGizmo.AxisLength * 0.5f);
+            DrawMesh(shaftWorld, view, projection, color);
+
+            float handleScale = (ScaleGizmo.HandleHalf * 2f) / cube;
+            Sce.Atf.VectorMath.Vec3F tip = ScaleGizmo.HandleCenter(origin, axis);
+            var tipWorld = Matrix.Scaling(handleScale, handleScale, handleScale) *
+                Matrix.Translation(tip.X, tip.Y, tip.Z);
+            DrawMesh(tipWorld, view, projection, color);
+        }
+
+        private void DrawRotateRing(Matrix view, Matrix projection, Sce.Atf.VectorMath.Vec3F origin, TranslateAxis axis, Color4 color)
+        {
+            float cube = ViewportSceneCamera.CubeSize;
+            float bead = (RotateGizmo.RingHalf * 2f) / cube;
+            int n = RotateGizmo.RingSegments;
+            float step = (float)(Math.PI * 2.0 / n);
+            for (int i = 0; i < n; i++)
+            {
+                Sce.Atf.VectorMath.Vec3F p = RotateGizmo.RingPoint(origin, axis, i * step);
+                var world = Matrix.Scaling(bead, bead, bead) *
+                    Matrix.Translation(p.X, p.Y, p.Z);
+                DrawMesh(world, view, projection, color);
+            }
         }
 
         private void DrawMesh(Matrix world, Matrix view, Matrix projection, Color4 color)
