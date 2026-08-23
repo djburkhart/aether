@@ -34,7 +34,8 @@ namespace Aether.Editor
     /// Display-free smoke for CI / <c>dotnet run -- --headless-session</c>.
     /// Constructs the same EditorSession the window hosts and proves selection,
     /// ATF descriptors, DomNode mutation, HistoryContext undo,
-    /// DomXml Open/Save round-trip, and Viewport CPU pick of Level placeholders.</summary>
+    /// DomXml Open/Save round-trip, Viewport CPU pick of Level placeholders,
+    /// and a headless translate-gizmo +X / Undo of PointLight.</summary>
     internal static class HeadlessSession
     {
         public static int Run()
@@ -614,6 +615,17 @@ namespace Aether.Editor
                 return 73;
             }
             session.Level.SelectedNode = light;
+            int translateCode = ProveViewportTranslate(session, "load");
+            if (translateCode != 0)
+                return translateCode;
+
+            light = session.Level.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: PointLight missing after viewport translate.");
+                return 73;
+            }
+            session.Level.SelectedNode = light;
             if (session.PropertyTarget == null)
             {
                 Console.Error.WriteLine("Error: selecting PointLight did not produce an ICustomTypeDescriptor target.");
@@ -1132,7 +1144,152 @@ namespace Aether.Editor
             if (pickCode != 0)
                 return pickCode;
 
+            int translateCode = ProveViewportTranslate(session, "viewport ticks");
+            if (translateCode != 0)
+                return translateCode;
+
             Console.WriteLine("headless stride ok");
+            return 0;
+        }
+
+        /// <summary>
+        /// After LightTest load: select PointLight, hit-test the +X handle,
+        /// then BeginAxisDrag(X) + ApplyAxisDelta(+1.5). Prints Translation X
+        /// before / after / after Undo. Same CPU path as a Viewport pointer
+        /// drag — no mouse, no GPU. Tick must not throw.</summary>
+        private static int ProveViewportTranslate(EditorSession session, string afterLabel)
+        {
+            ViewportPresenter presenter = session.Viewport.Presenter;
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw during translate after {0}: {1}", afterLabel, ex.Message);
+                return 134;
+            }
+
+            if (!session.Level.Select("PointLight"))
+            {
+                Console.Error.WriteLine("Error: LevelSession.Select(PointLight) failed before gizmo translate after {0}.", afterLabel);
+                return 135;
+            }
+
+            LevelNodeItem? lightItem = session.Level.SelectedNode;
+            var gob = lightItem != null ? lightItem.Node.As<IGameObject>() : null;
+            if (gob == null)
+            {
+                Console.Error.WriteLine("Error: PointLight did not adapt to IGameObject for gizmo translate after {0}.", afterLabel);
+                return 136;
+            }
+
+            float before = gob.Translation.X;
+            Console.WriteLine("PointLight translate X before: {0}", before);
+            Console.WriteLine(
+                "viewport gizmo path: LevelSession.BeginAxisDrag(X) + ApplyAxisDelta(+{0}) (CPU, no mouse/GPU)",
+                LevelSession.DocumentedTranslateDeltaX);
+
+            BoundSceneObject? light = session.Level.BoundScene.Find("PointLight");
+            if (light == null)
+            {
+                Console.Error.WriteLine("Error: bound scene missing PointLight for gizmo hit after {0}.", afterLabel);
+                return 137;
+            }
+
+            ViewportCameraFrame frame = ViewportSceneCamera.ComputeFrame(session.Level.BoundScene);
+            Vec3F tip = TranslateGizmo.HandleCenter(light.WorldTranslation, TranslateAxis.X);
+            float pixelX, pixelY;
+            if (ViewportSceneCamera.TryProject(frame, tip, presenter.Width, presenter.Height, out pixelX, out pixelY))
+            {
+                TranslateAxis? hit = session.Level.HitGizmoAt(pixelX, pixelY, presenter.Width, presenter.Height);
+                Console.WriteLine("viewport gizmo hit at +X handle: {0}", hit.HasValue ? hit.Value.ToString() : "(none)");
+                if (hit != TranslateAxis.X)
+                {
+                    Console.Error.WriteLine("Error: projected +X handle after {0} did not hit TranslateAxis.X.", afterLabel);
+                    return 138;
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("Error: could not project the +X gizmo handle after {0}.", afterLabel);
+                return 139;
+            }
+
+            if (!session.Level.BeginAxisDrag(TranslateAxis.X))
+            {
+                Console.Error.WriteLine("Error: BeginAxisDrag(X) failed after {0}.", afterLabel);
+                return 140;
+            }
+            if (!session.Level.ApplyAxisDelta(LevelSession.DocumentedTranslateDeltaX))
+            {
+                Console.Error.WriteLine("Error: ApplyAxisDelta(+X) failed after {0}.", afterLabel);
+                session.Level.EndAxisDrag();
+                return 141;
+            }
+            if (!session.Level.EndAxisDrag())
+            {
+                Console.Error.WriteLine("Error: EndAxisDrag failed after {0}.", afterLabel);
+                return 142;
+            }
+
+            float after = gob.Translation.X;
+            Console.WriteLine("PointLight translate X after +X: {0}", after);
+            if (Math.Abs(after - (before + LevelSession.DocumentedTranslateDeltaX)) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: PointLight translate X after gizmo +X should be {0}, got {1}.",
+                    before + LevelSession.DocumentedTranslateDeltaX,
+                    after);
+                return 143;
+            }
+
+            int sceneCode = ProveBoundScene(
+                session,
+                expectedCount: session.Level.GameObjectCount,
+                expectedName: "PointLight",
+                expectedTranslateX: after,
+                afterLabel: "gizmo +X");
+            if (sceneCode != 0)
+                return sceneCode;
+
+            try
+            {
+                presenter.Tick(0.05);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Error: viewport Tick threw after gizmo move ({0}): {1}", afterLabel, ex.Message);
+                return 144;
+            }
+
+            if (!session.CanUndo)
+            {
+                Console.Error.WriteLine("Error: gizmo translate after {0} did not record History.", afterLabel);
+                return 145;
+            }
+
+            session.Undo();
+            float undone = gob.Translation.X;
+            Console.WriteLine("PointLight translate X after undo: {0}", undone);
+            if (Math.Abs(undone - before) > 0.0001f)
+            {
+                Console.Error.WriteLine(
+                    "Error: gizmo undo after {0} should restore translate X {1}, got {2}.",
+                    afterLabel, before, undone);
+                return 146;
+            }
+
+            sceneCode = ProveBoundScene(
+                session,
+                expectedCount: session.Level.GameObjectCount,
+                expectedName: "PointLight",
+                expectedTranslateX: before,
+                afterLabel: "gizmo undo");
+            if (sceneCode != 0)
+                return sceneCode;
+
+            Console.WriteLine("headless viewport translate ok after {0}", afterLabel);
             return 0;
         }
 
