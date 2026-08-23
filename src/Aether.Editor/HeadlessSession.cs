@@ -603,7 +603,7 @@ namespace Aether.Editor
             if (sceneCode != 0)
                 return sceneCode;
 
-            int pickCode = ProveViewportPick(session, "after load");
+            int pickCode = ProveViewportPick(session, "load");
             if (pickCode != 0)
                 return pickCode;
 
@@ -1128,7 +1128,7 @@ namespace Aether.Editor
             string? fixture = LevelDocuments.FindSampleDocumentPath();
             if (fixture != null)
                 session.Open(fixture);
-            int pickCode = ProveViewportPick(session, "after viewport ticks");
+            int pickCode = ProveViewportPick(session, "viewport ticks");
             if (pickCode != 0)
                 return pickCode;
 
